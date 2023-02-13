@@ -7,6 +7,7 @@ ENV TZ=${TZ_ARG}
 RUN dpkg --add-architecture i386
 RUN apt-get update && apt-get install -y \
     python \
+    python3 \
     screen \
     tmux \
     binutils \
@@ -49,10 +50,17 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 # Helper utilities
+
 RUN apt-get update && apt-get install -y \
     gdb \
     gfortran \
     git \
     g++-9 \
     vim \
+    gnuplot \
  && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://bootstrap.pypa.io/pip/2.7/get-pip.py
+RUN python get-pip.py
+RUN pip install matplotlib
+RUN apt-get update && apt-get install -y python-tk tk-dev  && rm -rf /var/lib/apt/lists/*

@@ -88,7 +88,7 @@ def output_cpistack_table(results, metric = 'cpi'):
   print
 
 
-def avg_dram_ratio(results, metric = 'cpi'):
+def roi_cycles(results, metric = 'cpi'):
   data = results.get_data(metric)
   total = [ 0 for core in results.cores ]
   multiplier = 1.
@@ -112,18 +112,19 @@ def avg_dram_ratio(results, metric = 'cpi'):
   else:
     raise ValueError('Unknown metric %s' % metric)
 
-  for label in results.labels:
-    for core in results.cores:
-      total[core] += data[core][label]
+  print totaltime
+  # for label in results.labels:
+  #   for core in results.cores:
+  #     total[core] += data[core][label]
 
-  total_dram = 0
-  total_time = 0
-  for core in results.cores:
-    if data[core]['mem-dram'] > 0.01:
-      total_dram += data[core]['mem-dram']
-      total_time += total[core]
+  # total_dram = 0
+  # total_time = 0
+  # for core in results.cores:
+  #   if data[core]['mem-dram'] > 0.01:
+  #     total_dram += data[core]['mem-dram']
+  #     total_time += total[core]
 
-  print (total_dram / total_time)
+  # print (total_dram / total_time)
 
 
 def output_cpistack_gnuplot(results, metric = 'time', outputfile = 'cpi-stack', outputdir = '.', title = '', size = (640, 480), save_gnuplot_input = False):
@@ -225,9 +226,11 @@ if __name__ == '__main__':
                              groups = use_simple and cpistack_items.build_grouplist(legacy = True) or None,
                              use_simple = use_simple, use_simple_mem = use_simple_mem, no_collapse = no_collapse)
 
+  roi_cycles(results, "abstime")
+  # print results.max_cycles
   # if len(results.cores) > 1:
   #   output_cpistack_table(results, metric = metric or 'cpi')
   # else:
   #   output_cpistack_text(results)
-  output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title, save_gnuplot_input = save_gnuplot_input)
-  avg_dram_ratio(results)
+  # output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title, save_gnuplot_input = save_gnuplot_input)
+  # avg_dram_ratio(results)

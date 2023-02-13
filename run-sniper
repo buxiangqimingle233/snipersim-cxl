@@ -57,6 +57,7 @@ def usage():
   sys.exit(2)
 
 standalone = False
+# standalone = True
 ncores = 1
 outputdir = '.'
 configfiles = []
