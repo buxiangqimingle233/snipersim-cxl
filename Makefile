@@ -2,6 +2,9 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)")
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
+CFLAGS = -Wno-narrowing
+CPPFLAGS = -Wno-narrowing
+
 STANDALONE=$(SIM_ROOT)/lib/sniper
 PIN_FRONTEND=$(SIM_ROOT)/frontend/pin-frontend/obj-intel64/pin_frontend
 LIB_CARBON=$(SIM_ROOT)/lib/libcarbon_sim.a

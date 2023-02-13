@@ -17,6 +17,7 @@
 #include "rng.h"
 #include "routine_tracer.h"
 #include "sim_api.h"
+#include "numa_balancer.h"
 
 #include "stats.h"
 
@@ -34,6 +35,8 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
    , m_trace(tracefile.c_str(), responsefile.c_str(), thread->getId())
    , m_trace_has_pa(false)
    , m_address_randomization(Sim()->getCfg()->getBool("traceinput/address_randomization"))
+   , m_address_numa_balancing(Sim()->getCfg()->getInt("traceinput/address_numa_balancing"))
+   , m_numa_balancer(NULL)
    , m_appid_from_coreid(Sim()->getCfg()->getString("scheduler/type") == "sequential" ? true : false)
    , m_stop(false)
    , m_bbv_base(0)
@@ -77,9 +80,10 @@ TraceThread::TraceThread(Thread *thread, SubsecondTime time_start, String tracef
          m_address_randomization_table[j] = i;
       }
    }
-
+   if (m_address_numa_balancing) {
+      m_numa_balancer = NumaAddressBalancer::getNumaBalancer(m_address_numa_balancing);
+   }
    thread->setVa2paFunc(_va2pa, (UInt64)this);
-   
 }
 
 TraceThread::~TraceThread()
@@ -113,6 +117,9 @@ UInt64 TraceThread::va2pa(UInt64 va, bool *noMapping)
          //   LOG_PRINT_WARNING("No mapping found for logical address %lx", va);
          // Fall through to construct an address with our thread id in the upper bits (assume address is private)
       }
+   }
+   if (m_address_numa_balancing && m_numa_balancer) {
+      return m_numa_balancer->va2pa(va, m_thread->getCore()->getId());
    }
 
    UInt64 haddr;

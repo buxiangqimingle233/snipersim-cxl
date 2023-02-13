@@ -22,6 +22,6 @@ run-root:
 	docker run --rm -it -v "${HOME}:${HOME}" $(DOCKER_IMAGE)
 
 run:
-	docker run --rm -it -v "${HOME}:${HOME}" --user $(shell id -u):$(shell id -g) -w "${PWD}" $(DOCKER_IMAGE)
+	docker run --rm -it --cap-add=SYS_PTRACE -v "${HOME}:${HOME}" -w "${PWD}" $(DOCKER_IMAGE)
 
 .PHONY: all build-all run-root run

@@ -30,6 +30,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
          ShmemPerf m_dummy_shmem_perf;
 
+         // TODO: The main function to compute memory access latencyf
          SubsecondTime runDramPerfModel(core_id_t requester, SubsecondTime time, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
 
          void addToDramAccessCount(IntPtr address, access_t access_type);
