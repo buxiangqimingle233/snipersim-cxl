@@ -53,8 +53,11 @@ class TraceThread : public Runnable
       Sift::Reader m_trace;
       bool m_trace_has_pa;
       bool m_address_randomization;
-      int m_address_numa_balancing;
-      NumaAddressBalancer* m_numa_balancer;
+
+      // Move the numa balancer to MemoryPermModel to improve the simulation speed
+      // int m_address_numa_balancing;
+      // NumaAddressBalancer* m_numa_balancer;
+
       bool m_appid_from_coreid;
       uint8_t m_address_randomization_table[256];
       bool m_stop;
