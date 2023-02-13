@@ -18,4 +18,18 @@ public:
     };
 };
 
+
+class InterleaveBalancer: public NumaAddressBalancer {
+
+private:
+    
+
+public:
+    virtual UInt64 va2pa(UInt64 va, int core_id) override;
+
+    InterleaveBalancer(): NumaAddressBalancer() { };
+    ~InterleaveBalancer() { };
+
+};
+
 #endif
