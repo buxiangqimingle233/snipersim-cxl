@@ -29,8 +29,10 @@ DramPerfModelHybrid::DramPerfModelHybrid(core_id_t core_id,
     registerStatsMetric("dram", core_id, "total-access-latency", &m_total_access_latency);
     registerStatsMetric("dram", core_id, "total-queueing-delay", &m_total_queueing_delay);
 
-    int type = Sim()->getCfg()->getInt("traceinput/address_numa_balancing");
-    numa_balancer = NumaAddressBalancer::createNumaBalancer(type, 16384, 1919810);     // Some magic number for primary testing (x)
+    int type = Sim()->getCfg()->getInt("traceinput/numa_balance_strategy");
+    unsigned int local_mem_capacity = Sim()->getCfg()->getInt("perf_model/dram/local_capacity");
+    unsigned int remote_mem_capacity = Sim()->getCfg()->getInt("perf_model/dram/remote_capacity");
+    numa_balancer = NumaAddressBalancer::createNumaBalancer(type, local_mem_capacity, remote_mem_capacity);     // Some magic number for primary testing (x)
 }
 
 

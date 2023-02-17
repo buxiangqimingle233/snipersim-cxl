@@ -31,13 +31,27 @@ public:
     static NumaAddressBalancer* createNumaBalancer(int type, UInt64 local_mem_capacity, UInt64 remote_mem_capacity);
 };
 
+class InterleaveBalancer: public NumaAddressBalancer {
+
+private:
+    scaling_bloom_t* local_mem_recorder;
+    unsigned int CAPACITY;
+    float ERROR_RATE;
+    NumaAddressBalancer::NUMA_NODE last_decision;
+
+public:
+    virtual NUMA_NODE locate_where(UInt64 va, int core_id) override;
+
+    InterleaveBalancer(int type);
+    ~InterleaveBalancer();
+};
 
 class LocalFirstBalancer: public NumaAddressBalancer {
 
 private:
-    scaling_bloom_t* local_mem_bloom;
-    const unsigned int CAPACITY = 100000;
-    const float ERROR_RATE = .05;
+    scaling_bloom_t* local_mem_recorder;
+    unsigned int CAPACITY;
+    float ERROR_RATE;
     unsigned int local_page_limit;
     unsigned int n_local_allocated_page;
     // const unsigned int FILTER_CNT_LIMIT = 100000;
