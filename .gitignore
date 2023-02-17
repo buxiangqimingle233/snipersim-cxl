@@ -1,6 +1,9 @@
 # experiments
 experiments/*
 
+# dev
+.vscode/*
+
 
 # object files
 *.d
