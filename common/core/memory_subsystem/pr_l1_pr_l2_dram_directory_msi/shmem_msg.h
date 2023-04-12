@@ -51,7 +51,9 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt32 m_data_length;
          ShmemPerf* m_perf;
 
+
       public:
+         bool add_cxl_mem_overhead;
          ShmemMsg() = delete;
          ShmemMsg(ShmemPerf* perf);
          ShmemMsg(msg_t msg_type,

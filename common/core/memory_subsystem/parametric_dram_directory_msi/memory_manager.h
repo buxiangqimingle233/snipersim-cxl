@@ -19,8 +19,15 @@
 class DramCache;
 class ShmemPerf;
 
+
+typedef uint32_t MEMORY_REGION;
+#define DEFAULT (0)
+#define SHARED_L2 (1 << 2)
+#define LONG_LATENCY (1 << 1)
+
 namespace ParametricDramDirectoryMSI
 {
+
    class TLB;
 
    typedef std::pair<core_id_t, MemComponent::component_t> CoreComponentType;
@@ -56,6 +63,8 @@ namespace ParametricDramDirectoryMSI
 
          // Performance Models
          CachePerfModel* m_cache_perf_models[MemComponent::LAST_LEVEL_CACHE + 1];
+
+         int m_region;
 
          // Global map of all caches on all cores (within this process!)
          static CacheCntlrMap m_all_cache_cntlrs;
@@ -113,5 +122,8 @@ namespace ParametricDramDirectoryMSI
          SubsecondTime getCost(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type);
          void incrElapsedTime(SubsecondTime latency, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
          void incrElapsedTime(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
+
+         MEMORY_REGION getMemoryRegion() { return m_region; }
+         void setMemoryRegion(MEMORY_REGION where);
    };
 }

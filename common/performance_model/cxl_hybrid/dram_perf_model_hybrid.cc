@@ -13,8 +13,9 @@ DramPerfModelHybrid::DramPerfModelHybrid(core_id_t core_id,
     m_queue_model(NULL),
     m_dram_bandwidth(8 * Sim()->getCfg()->getFloat("perf_model/dram/per_controller_bandwidth")),
     m_total_queueing_delay(SubsecondTime::Zero()),
-    m_total_access_latency(SubsecondTime::Zero()), 
-    numa_balancer(NULL)
+    m_total_access_latency(SubsecondTime::Zero()),
+    m_node(DramPerfModelHybrid::MEMORY_NODE::LOCAL)
+    // numa_balancer(NULL)
 {
     
     m_dram_access_cost_local = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/local_latency")));
@@ -29,10 +30,10 @@ DramPerfModelHybrid::DramPerfModelHybrid(core_id_t core_id,
     registerStatsMetric("dram", core_id, "total-access-latency", &m_total_access_latency);
     registerStatsMetric("dram", core_id, "total-queueing-delay", &m_total_queueing_delay);
 
-    int type = Sim()->getCfg()->getInt("traceinput/numa_balance_strategy");
+    // int type = Sim()->getCfg()->getInt("traceinput/numa_balance_strategy");
     unsigned int local_mem_capacity = Sim()->getCfg()->getInt("perf_model/dram/local_capacity");
     unsigned int remote_mem_capacity = Sim()->getCfg()->getInt("perf_model/dram/remote_capacity");
-    numa_balancer = NumaAddressBalancer::createNumaBalancer(type, local_mem_capacity, remote_mem_capacity);     // Some magic number for primary testing (x)
+    // numa_balancer = NumaAddressBalancer::createNumaBalancer(type, local_mem_capacity, remote_mem_capacity);     // Some magic number for primary testing (x)
 }
 
 
@@ -41,10 +42,10 @@ DramPerfModelHybrid::~DramPerfModelHybrid() {
         delete m_queue_model;
         m_queue_model = NULL;
     } 
-    if (numa_balancer) {
-        delete numa_balancer;
-        numa_balancer = NULL;
-    }
+    // if (numa_balancer) {
+    //     delete numa_balancer;
+    //     numa_balancer = NULL;
+    // }
 }
 
 
@@ -72,14 +73,13 @@ DramPerfModelHybrid::getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, c
     }
 
     SubsecondTime m_dram_access_cost;
-    NumaAddressBalancer::NUMA_NODE where = numa_balancer->locate_where(address, core_id);
-    if (where == NumaAddressBalancer::NUMA_NODE::LOCAL) {
+    // NumaAddressBalancer::NUMA_NODE where = numa_balancer->locate_where(address, core_id);
+
+    if (m_node == MEMORY_NODE::LOCAL) {
         m_dram_access_cost = m_dram_access_cost_local;
-    } else if (where == NumaAddressBalancer::NUMA_NODE::REMOTE) {
-        m_dram_access_cost = m_dram_access_cost_remote;
     } else {
-        m_dram_access_cost = (m_dram_access_cost_local + m_dram_access_cost_remote) / 2;
-    }
+        m_dram_access_cost = m_dram_access_cost_remote;
+    } 
     SubsecondTime access_latency = processing_time + queue_delay + m_dram_access_cost;
 
     perf->updateTime(pkt_time);

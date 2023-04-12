@@ -12,6 +12,7 @@
 #include "config.hpp"
 #include "distribution.h"
 #include "topology_info.h"
+#include "dram_perf_model_hybrid.h"
 
 #include <algorithm>
 
@@ -42,7 +43,8 @@ MemoryManager::MemoryManager(Core* core,
    m_tlb_miss_parallel(false),
    m_tag_directory_present(false),
    m_dram_cntlr_present(false),
-   m_enabled(false)
+   m_enabled(false),
+   m_region(DEFAULT)
 {
    // Read Parameters from the Config file
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
@@ -539,9 +541,24 @@ void
 MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num)
 {
 MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, receiver, receiver_mem_component);
+
+   bool add_cxl_mem_overhead = false;
+   // FIXME: the path of a memory read: core->cache directory->DRAM, the data_length == -1 indicates the read to cxl memory is reflected by the 
+   // cache directory, while m_region & LONG_LATENCY indicates that the core of this memory manager issues a read to cxl memory
+   // Bugs will happen when the directory core is issuing a cxl-memory read while reflect a common read. 
+   // However, this bug will only influence on the current memory operation, since the memory model will clean up the cxl flag after every read. 
+   if ((receiver_mem_component == MemComponent::DRAM && (data_length == -1))) {
+      add_cxl_mem_overhead = true;
+      data_length = 0;
+   }
+   if (receiver_mem_component == MemComponent::TAG_DIR && (m_region & LONG_LATENCY)) {
+      add_cxl_mem_overhead = true;
+   }
+
    assert((data_buf == NULL) == (data_length == 0));
    PrL1PrL2DramDirectoryMSI::ShmemMsg shmem_msg(msg_type, sender_mem_component, receiver_mem_component, requester, address, data_buf, data_length, perf);
    shmem_msg.setWhere(where);
+   shmem_msg.add_cxl_mem_overhead = add_cxl_mem_overhead;
 
    Byte* msg_buf = shmem_msg.makeMsgBuf();
    SubsecondTime msg_time = getShmemPerfModel()->getElapsedTime(thread_num);
@@ -657,6 +674,17 @@ MemoryManager::disableModels()
 
    if (m_dram_cntlr_present)
       m_dram_cntlr->getDramPerfModel()->disable();
+}
+
+void 
+MemoryManager::setMemoryRegion(MEMORY_REGION where) 
+{
+   m_region = where; 
+   // if (where & LONG_LATENCY) {
+   //    static_cast<DramPerfModelHybrid*>(getDramCntlr()->getDramPerfModel())->setMemoryNode(DramPerfModelHybrid::MEMORY_NODE::REMOTE);
+   // } else {
+   //    static_cast<DramPerfModelHybrid*>(getDramCntlr()->getDramPerfModel())->setMemoryNode(DramPerfModelHybrid::MEMORY_NODE::LOCAL);
+   // }
 }
 
 }

@@ -26,6 +26,7 @@ class MagicServer
       UInt64 Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UInt64 cmd, UInt64 arg0, UInt64 arg1);
       UInt64 setFrequency(UInt64 core_number, UInt64 freq_in_mhz);
       UInt64 getFrequency(UInt64 core_number);
+      UInt64 changeMemoryModelMode(UInt64 core_id, UInt64 where);
 
       void enablePerformance();
       void disablePerformance();

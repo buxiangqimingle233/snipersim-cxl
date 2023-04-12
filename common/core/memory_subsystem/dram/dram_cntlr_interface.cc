@@ -18,7 +18,9 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          Byte data_buf[getCacheBlockSize()];
          SubsecondTime dram_latency;
          HitWhere::where_t hit_where;
-
+         
+         // pass the region from msg to dram-cn
+         add_cxl_mem_overhead = shmem_msg->add_cxl_mem_overhead;
          boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf());
 
          getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);

@@ -277,6 +277,10 @@ namespace ParametricDramDirectoryMSI
 
          ShmemPerfModel* m_shmem_perf_model;
 
+         // CXL overheads
+         // unsigned int cxl_mem_roundtrip;
+         unsigned int cxl_cache_roundtrip;
+
          // Core-interfacing stuff
          void accessCache(
                Core::mem_op_t mem_op_type,
