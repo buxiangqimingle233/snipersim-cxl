@@ -702,12 +702,14 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
 
       MYLOG("Sending request to DRAM for the data");
+      // Hacking the sendMsg function, using the negative data length to indicate the reads on cxl memory
+      int hacked_length = orig_shmem_msg->add_cxl_mem_overhead ? -1 : 0;
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_READ_REQ,
             MemComponent::TAG_DIR, MemComponent::DRAM,
             receiver /* requester */,
             dram_node /* receiver */,
             address,
-            NULL, 0,
+            NULL, hacked_length,
             HitWhere::UNKNOWN,
             orig_shmem_msg->getPerf(),
             ShmemPerfModel::_SIM_THREAD);

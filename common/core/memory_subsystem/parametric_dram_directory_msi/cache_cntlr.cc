@@ -152,7 +152,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_last_remote_hit_where(HitWhere::UNKNOWN),
    m_shmem_perf(new ShmemPerf()),
    m_shmem_perf_global(NULL),
-   m_shmem_perf_model(shmem_perf_model)
+   m_shmem_perf_model(shmem_perf_model),
+   cxl_cache_roundtrip(0)
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
@@ -280,6 +281,11 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
       registerStatsMetric(name, core_id, "uncore-totaltime", &m_shmem_perf_totaltime);
       registerStatsMetric(name, core_id, "uncore-requests", &m_shmem_perf_numrequests);
    }
+
+   if (Sim()->getCfg()->hasKey("perf_model/cxl/enabled") && Sim()->getCfg()->getBool("perf_model/cxl/enabled")) {
+      // cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
+      cxl_cache_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_cache_roundtrip");
+   }
 }
 
 CacheCntlr::~CacheCntlr()
@@ -333,6 +339,7 @@ CacheCntlr::processMemOpFromCore(
       bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
+   // MEMORY_REGION memory_region = m_memory_manager->getMemoryRegion();
 
    // Protect against concurrent access from sibling SMT threads
    ScopedLock sl_smt(m_master->m_smt_lock);
@@ -857,6 +864,12 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
       }
 
+      // Coherence requests on L2 caches will traverse the CXL link, causing the 2x CXL.cache roundtrip lantency
+      SubsecondTime cxl_latency = SubsecondTime::Zero();
+      if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & SHARED_L2)) {
+         cxl_latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+      }
+
       if (mem_op_type != Core::READ) // write that hits
       {
          /* Invalidate/flush in previous levels */
@@ -866,7 +879,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             if (*it != requester)
             {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first);
+               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
                sibling_hit |= res.second;
             }
          }
@@ -885,7 +898,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first);
+               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
                sibling_hit |= res.second;
             }
          }
@@ -901,11 +914,11 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first);
+               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
                sibling_hit |= res.second;
             }
          }
-
+         
          MYLOG("add latency %s, sibling_hit(%u)", itostr(latency).c_str(), sibling_hit);
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
@@ -1117,6 +1130,9 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
    SubsecondTime dram_latency;
    HitWhere::where_t hit_where;
 
+   if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & LONG_LATENCY)) {
+      m_master->m_dram_cntlr->add_cxl_mem_overhead = true;
+   }
    switch (mem_op_type)
    {
       case Core::READ:
@@ -1499,6 +1515,7 @@ MYLOG("evicting @%lx", evict_address);
             // Access DRAM
             SubsecondTime dram_latency;
             HitWhere::where_t hit_where;
+
             boost::tie<HitWhere::where_t, SubsecondTime>(hit_where, dram_latency) = accessDRAM(Core::WRITE, evict_address, false, evict_buf);
 
             // Occupy evict buffer
@@ -1711,6 +1728,7 @@ CacheCntlr::updateCacheBlock(IntPtr address, CacheState::cstate_t new_cstate, Tr
       so only when we accessed data should we return any latency */
    if (is_writeback)
       latency += m_writeback_time.getLatency();
+   
    return std::pair<SubsecondTime, bool>(latency, sibling_hit);
 }
 

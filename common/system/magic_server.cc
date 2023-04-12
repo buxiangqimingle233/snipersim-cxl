@@ -11,6 +11,7 @@
 #include "stats.h"
 #include "timer.h"
 #include "thread.h"
+#include "../core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h"
 
 MagicServer::MagicServer()
       : m_performance_enabled(false)
@@ -61,7 +62,9 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
             return 0;
          }
       case SIM_CMD_MHZ_SET:
-         return setFrequency(arg0, arg1);
+         // Hacked
+         // return setFrequency(arg0, arg1);
+         return changeMemoryModelMode(core_id, arg1);
       case SIM_CMD_NAMED_MARKER:
       {
          char str[256];
@@ -201,6 +204,23 @@ UInt64 MagicServer::setPerformance(bool enabled)
    return 0;
 }
 
+UInt64 MagicServer::changeMemoryModelMode(UInt64 core_id, UInt64 where) {
+   ParametricDramDirectoryMSI::MemoryManager* m_memory_manager = static_cast<ParametricDramDirectoryMSI::MemoryManager*>(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager());
+   assert(m_memory_manager != NULL);
+   MEMORY_REGION masked_where = DEFAULT;
+   if (((where & SHARED_L2) && !(where & LONG_LATENCY)) || (where > (SHARED_L2 | LONG_LATENCY))) {
+      printf("[SNIPER ERROR] unsupported memory region %ld\n", where);
+   } else {
+      printf("[SNIPER] change memory mode of core %ld to %ld\n", core_id, where);
+      masked_where = (where & SHARED_L2) | (where & LONG_LATENCY);      // mask
+   }
+   m_memory_manager->setMemoryRegion(masked_where);
+   return 0;
+}
+
+
+// We hack this hook server to tell the memory performance model where the next 
+// instruction (always be memory op) locates. 
 UInt64 MagicServer::setFrequency(UInt64 core_number, UInt64 freq_in_mhz)
 {
    UInt32 num_cores = Sim()->getConfig()->getApplicationCores();

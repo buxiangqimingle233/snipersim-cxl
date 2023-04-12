@@ -26,20 +26,16 @@ int main() {
 	unsigned long freq = SimGetOwnFreqMHz();
 	printf("Current Freq = %lu MHz\n", freq);
 
-	freq = 5000;
+	freq = (1<<1) | (1<<1);
 	printf("Setting frequency to %lu MHz\n", freq);
 	SimSetOwnFreqMHz(freq);
-	freq = SimGetOwnFreqMHz();
-	printf("Current Freq = %lu MHz\n", freq);
 
 	value = 0;
 	loop();
 
-	freq = 1000;
+	freq = (1<<1);
+	SimSetOwnFreqMHz(freq);
 	printf("Setting frequency to %lu MHz\n", freq);
-	SimSetFreqMHz(1, freq);
-	freq = SimGetFreqMHz(1);
-	printf("Current Freq = %lu MHz\n", freq);
 
 	value = 0;
 	loop();

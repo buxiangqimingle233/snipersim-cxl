@@ -19,12 +19,14 @@ class DramPerfModelHybrid : public DramPerfModel
         SubsecondTime m_total_queueing_delay;
         SubsecondTime m_total_access_latency;
 
-        NumaAddressBalancer* numa_balancer;
-
     public:
+        enum MEMORY_NODE { LOCAL, REMOTE } m_node;
         DramPerfModelHybrid(core_id_t core_id, UInt32 cache_block_size);
 
         ~DramPerfModelHybrid();
+
+        void setMemoryNode(MEMORY_NODE m) { m_node = m; };
+        MEMORY_NODE getMemoryNode() { return m_node; };
 
         SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, \
             IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);

@@ -4,6 +4,8 @@
 #include "fixed_types.h"
 #include "subsecond_time.h"
 #include "hit_where.h"
+#include "simulator.h"
+#include "config.hpp"
 #include "shmem_msg.h"
 
 #include "boost/tuple/tuple.hpp"
@@ -24,6 +26,9 @@ class DramCntlrInterface
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
    public:
+      unsigned int cxl_mem_roundtrip;
+      bool add_cxl_mem_overhead;    // This variable indicates whether the current memory op locates on CXL-devices
+                                    // This is hacking variable to keep the function signiture of getDramPerfModel
       typedef enum
       {
          READ = 0,
@@ -35,7 +40,13 @@ class DramCntlrInterface
          : m_memory_manager(memory_manager)
          , m_shmem_perf_model(shmem_perf_model)
          , m_cache_block_size(cache_block_size)
-      {}
+         , cxl_mem_roundtrip(0)
+         , add_cxl_mem_overhead(false)
+      {
+         if (Sim()->getCfg()->hasKey("perf_model/cxl/enabled") && Sim()->getCfg()->getBool("perf_model/cxl/enabled")) {
+            cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
+         }
+      }
       virtual ~DramCntlrInterface() {}
 
       virtual boost::tuple<SubsecondTime, HitWhere::where_t> getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemPerf *perf) = 0;

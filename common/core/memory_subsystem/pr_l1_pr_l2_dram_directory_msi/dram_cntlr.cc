@@ -39,6 +39,7 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    m_dram_access_count = new AccessCountMap[DramCntlrInterface::NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
+
 }
 
 DramCntlr::~DramCntlr()
@@ -68,6 +69,10 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
    }
 
    SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf);
+   if (add_cxl_mem_overhead) {
+      dram_access_latency += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+      perf->updateTime(now + dram_access_latency, ShmemPerf::DRAM_DEVICE);
+   }
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
@@ -95,6 +100,10 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
    }
 
    SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, &m_dummy_shmem_perf);
+   if (add_cxl_mem_overhead) {
+      dram_access_latency += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+      m_dummy_shmem_perf.updateTime(now + dram_access_latency, ShmemPerf::DRAM_DEVICE);
+   }
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
