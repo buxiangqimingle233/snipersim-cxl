@@ -8,7 +8,8 @@ class CoherencyProtocol
       {
          MSI,
          MESI,
-         MESIF
+         MESIF,
+         MEI
       };
 };
 
