@@ -58,7 +58,7 @@ def usage():
 
 standalone = False
 # standalone = True
-ncores = 1
+ncores = 128
 outputdir = '.'
 configfiles = []
 sniperoptions = []
