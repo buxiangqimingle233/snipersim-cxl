@@ -75,10 +75,6 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
    registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
 
    String protocol = Sim()->getCfg()->getString("caching_protocol/variant");
-   if (protocol == "mei") 
-   {
-      m_protocol = CoherencyProtocol::MEI;
-   }
    if (protocol == "msi")
    {
       m_protocol = CoherencyProtocol::MSI;
