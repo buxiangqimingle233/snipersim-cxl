@@ -117,9 +117,9 @@ void Sift::Writer::initResponse()
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
      printf("%s\n", m_response_filename);
-   //   response = new vifstream(m_response_filename, std::ios::in);
-     response = new vifstream(m_response_filename, std::ios::in | std::ios::out | std::ios::app);
-   //   std::cerr << "Error: " << strerror(errno);
+     response = new vifstream(m_response_filename, std::ios::in);
+   //   response = new vifstream(m_response_filename, std::ios::in | std::ios::out | std::ios::app);
+     std::cerr << "Error: " << strerror(errno) << " " << getpid();
      sift_assert(!response->fail());
    }
 }
@@ -739,7 +739,6 @@ int32_t Sift::Writer::Fork()
 
 uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 {
-   return 1;
    if (!output)
    {
       return 1;
@@ -790,7 +789,6 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 
 bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
 {
-   return false;
    if (!output)
    {
       return false;
