@@ -1,4 +1,5 @@
 #include <string>
+#include <iostream>
 
 namespace frontend
 {
@@ -6,6 +7,7 @@ namespace frontend
 template <typename T>
 FrontendOptions<T>::FrontendOptions(int argc, const char * argv [])
 {
+  // std::cerr << "WUWHUWHWUHWUHWU" << std::endl;
   this-> parsing_error = true;
   this->current_mode = Sift::ModeIcount;
   this->verbose = false;

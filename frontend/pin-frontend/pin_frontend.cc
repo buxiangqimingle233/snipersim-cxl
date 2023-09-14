@@ -10,6 +10,7 @@ extern "C" {
 #include "frontend.h"
 #include "globals.h"
 #include "frontend_threads.h"
+#include <iostream>
 //#include "pin.H"
 
 /**
@@ -93,6 +94,7 @@ template <> class FrontendOptions<PinFrontend> : public OptionsBase<PinFrontend>
   std::string cmd_summary();
 
   private:
+  ez::ezOptionParser opt;
   /// Memory lock to create a new thread within the frontend
   PIN_LOCK new_threadid_lock;
 
@@ -127,6 +129,47 @@ FrontendOptions<PinFrontend>::FrontendOptions(int argc, const char* argv[])
   send_physical_address = KnobSendPhysicalAddresses;
   stop_address = KnobStopAddress;
   app_id = KnobSiftAppId;
+
+
+  /*
+  * The following codes are copied from FrontendOptions template function
+  */ 
+
+  // // Add command line options that can be processed
+  // this->opt.add(
+  //   "0", // Default.
+  //   0, // Required?
+  //   1, // Number of args expected.
+	// 0, // Delimiter if expecting multiple args.
+	// "Use ROI markers.", // Help description.
+	// "-roi"     // Flag token. 
+  // );
+  // this->opt.add("0", 0, 1, 0, "Verbose output.", "-verbose");
+  // this->opt.add("0", 0, 1, 0, "Number of frontend emulated cores.", "-ncores");
+  // this->opt.add("0", 0, 1, 0, "Number of instructions to fast forward.", "-f");
+  // this->opt.add("0", 0, 1, 0, "Number of instructions to trace in detail (default = all).", "-d");
+  // this->opt.add("0", 0, 1, 0, "Blocksize.", "-b");  
+  // this->opt.add("trace", 0, 1, 0, "Output file.", "-o");
+  // this->opt.add("", 0, 1, 0, "State file.", "-statefile");
+  // this->opt.add("0", 0, 1, 0, "Emulate syscalls (required for multithreaded applications, default = 0).", "-e");
+  // this->opt.add("0", 0, 1, 0, "SIFT app id (default = 0).", "-s");
+  // this->opt.add("0", 0, 1, 0, "Use response files (required for multithreaded applications or when emulating syscalls, default = 0).", "-r");
+  // this->opt.add("0", 0, 1, 0, "Send logical to physical address mapping.", "-pa");
+  // this->opt.add("0", 0, 1, 0, "Stop address (0 = disabled).", "-stop");
+  // this->opt.add("", 0, 1, 0, "Frontend state file.", "-o");
+  // this->opt.add("", 1, -1, ' ', "Application to simulate.", "-app");
+  // this->opt.add("x86_64", 1, -1, ' ', "ISA of the simulation.", "-isa");
+  // this->opt.parse(argc, const_cast<const char**>(argv));
+
+  // if (opt.isSet("-d")) {
+  //   int detailed_value;
+  //   this->opt.get("-d")->getInt(detailed_value);
+  //   this->detailed_target = detailed_value;
+  // } else {
+  //   this->detailed_target = 0;
+  // }
+
+ 
 }
 
 inline std::string FrontendOptions<PinFrontend>::cmd_summary()
@@ -459,6 +502,7 @@ void PinFrontend::init()
   }
   // Init callbacks
   initBaseCB();
+  
   // Thread-related callbacks
   m_threads->initThreads();
 }

@@ -36,6 +36,7 @@ __sift_assert_fail(__const char *__assertion, __const char *__file,
        __THROW
 {
    __assert_fail(__assertion, __file, __line, __function);
+   // std::cerr << "Error: " << strerror(errno);
 }
 
 
@@ -115,7 +116,10 @@ void Sift::Writer::initResponse()
    if (!response)
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
-     response = new vifstream(m_response_filename, std::ios::in);
+     printf("%s\n", m_response_filename);
+   //   response = new vifstream(m_response_filename, std::ios::in);
+     response = new vifstream(m_response_filename, std::ios::in | std::ios::out | std::ios::app);
+   //   std::cerr << "Error: " << strerror(errno);
      sift_assert(!response->fail());
    }
 }
@@ -735,6 +739,7 @@ int32_t Sift::Writer::Fork()
 
 uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 {
+   return 1;
    if (!output)
    {
       return 1;
@@ -785,6 +790,7 @@ uint64_t Sift::Writer::Magic(uint64_t a, uint64_t b, uint64_t c)
 
 bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuReply &res)
 {
+   return false;
    if (!output)
    {
       return false;
@@ -808,6 +814,9 @@ bool Sift::Writer::Emulate(Sift::EmuType type, Sift::EmuRequest &req, Sift::EmuR
    {
       Record respRec;
       response->read(reinterpret_cast<char*>(&respRec), sizeof(rec.Other));
+      if (response->fail()) {
+         std::cerr << type << std::endl;
+      }
       sift_assert(!response->fail());
       sift_assert(respRec.Other.zero == 0);
 

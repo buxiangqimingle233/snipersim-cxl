@@ -51,7 +51,7 @@ Sift::Reader::Reader(const char *filename, const char *response_filename, uint32
 {
    m_filename = strdup(filename);
    m_response_filename = strdup(response_filename);
-
+   
    // initing stream here could cause deadlock when using pipes, as this should be able to be new()ed from
    // a thread that should not block
 }

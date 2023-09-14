@@ -84,6 +84,7 @@ VOID sendInstruction(THREADID threadid, ADDRINT addr, UINT32 size, UINT32 num_ad
 
    if (detailed_target != 0 && thread_data[threadid].icount_detailed >= detailed_target)
    {
+      std::cout << "WUHU: Exit" << std::endl;
       closeFile(threadid);
       PIN_Detach();
       return;

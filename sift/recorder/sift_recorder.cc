@@ -170,6 +170,13 @@ VOID Handler(CONTROLLER::EVENT_TYPE ev, VOID * v, CONTEXT * ctxt, VOID * ip, THR
 
 int main(int argc, char **argv)
 {
+   #ifdef DEBUG
+      std::cout<<"Please attach debugger to process: "<< getpid() <<std::endl;
+      std::cin.get();
+   #endif
+   // std::cin >> c;
+   // scanf("%c", &c);
+
 #if defined(SDE_INIT)
 	sde_pin_init(argc,argv);
 	sde_init();
@@ -202,6 +209,8 @@ int main(int argc, char **argv)
    blocksize = KnobBlocksize.Value();
    fast_forward_target = KnobFastForwardTarget.Value();
    detailed_target = KnobDetailedTarget.Value();
+
+   std::cerr << KnobOutputFile.Value() << std::endl;
 
    if (KnobEmulateSyscalls.Value() || (!KnobUseROI.Value() && !KnobMPIImplicitROI.Value()))
    {

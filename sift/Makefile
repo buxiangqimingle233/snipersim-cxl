@@ -1,4 +1,5 @@
-SOURCES=$(filter-out siftdump.cc,$(wildcard *.cc))
+MAINS=siftdump.cc memcounter.cc
+SOURCES=$(filter-out $(MAINS),$(wildcard *.cc))
 OBJECTS=$(patsubst %.cc,%.o,$(SOURCES))
 TARGET=libsift.a
 
@@ -22,13 +23,15 @@ else
    endif
 endif
 
-all : $(TARGET) siftdump recorder
+all : $(TARGET) siftdump recorder memcounter
 
 .PHONY : recorder
+.PHONY : memcounter
 
 include ../common/Makefile.common
 
 CXXFLAGS+=-fPIC $(CXXFLAGS_ARCH)
+LDFLAGS+=-L../xed_kit/lib -L. -lxed -lxed-ild
 
 %.o : %.cc $(wildcard *.h) Makefile
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
@@ -41,6 +44,10 @@ $(TARGET) : $(OBJECTS)
 siftdump : siftdump.o $(TARGET)
 	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
 	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz
+
+memcounter : memcounter.o $(TARGET)
+	$(_MSG) '[CXX   ]' $(subst $(shell readlink -f $(SIM_ROOT))/,,$(shell readlink -f $@))
+	$(_CMD) $(CXX) $(CXXFLAGS_ARCH) -o $@ $^ -L. -lsift -lz $(LDFLAGS)
 
 recorder : $(TARGET)
 ifneq ($(USE_PINPLAY), 1)

@@ -50,7 +50,7 @@ void FrontendControl <T>::openFile(threadid_t threadid)
     closeFile(threadid);
     ++m_thread_data[threadid].blocknum;
   }
-
+  printf("thread_id: %d\n", threadid);
   if (m_thread_data[threadid].thread_num != 0)
   {
     sift_assert(m_options->get_response_files() != 0);
@@ -60,37 +60,39 @@ void FrontendControl <T>::openFile(threadid_t threadid)
   char response_filename[1024] = {0};
   char remote_filename[1024] = {0};
   char remote_response_filename[1024] = {0};
-  if (m_options->get_response_files() == false)
-  {
-    if (m_options->get_blocksize()) {
-      sprintf(filename, "%s.%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".sift", m_thread_data[threadid].blocknum);
-    } else {
-      sprintf(filename, "%s.sift", m_options->get_output_file().c_str());
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.sift");
-    }
-  }
-  else
-  {
-    if (m_options->get_blocksize()) {
-      sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
-    } else {
-      sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
-      sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
-    }
-  }
+  
 
-  if (m_options->get_verbose())
-    std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Output = [" << filename << "]" << std::endl;
+  // if (m_options->get_response_files() == false)
+  // {
+  //   if (m_options->get_blocksize()) {
+  //     sprintf(filename, "%s.%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum);
+  //     sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".sift", m_thread_data[threadid].blocknum);
+  //   } else {
+  //     sprintf(filename, "%s.sift", m_options->get_output_file().c_str());
+  //     sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.sift");
+  //   }
+  // }
+  // else
+  // {
+  //   if (m_options->get_blocksize()) {
+  //     sprintf(filename, "%s.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //     sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.%" PRIu64 ".app%" PRId32 ".th%" PRIu64 ".sift", m_thread_data[threadid].blocknum, m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //   } else {
+  //     sprintf(filename, "%s.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //     sprintf(remote_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //   }
+  // }
 
-  if (m_options->get_response_files())
-  {
-    sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
-    sprintf(remote_response_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
-    if (m_options->get_verbose())
-      std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Response = [" << response_filename << "]" << std::endl;
-  }
+  // if (m_options->get_verbose())
+  //   std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Output = [" << filename << "]" << std::endl;
+
+  // if (m_options->get_response_files())
+  // {
+  //   sprintf(response_filename, "%s_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_output_file().c_str(), m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //   sprintf(remote_response_filename, "/home/cecilia/work/sniper/internal_mod/sniper/ssh_dir/run_benchmarks_response.app%" PRId32 ".th%" PRIu64 ".sift", m_options->get_app_id(), m_thread_data[threadid].thread_num);
+  //   if (m_options->get_verbose())
+  //     std::cerr << "[SNIPER_FRONTEND:" << m_options->get_app_id() << ":" << m_thread_data[threadid].thread_num << "] Response = [" << response_filename << "]" << std::endl;
+  // }
 
   // Open the file for writing
   // TODO adapt this to a more cross platform friendly version

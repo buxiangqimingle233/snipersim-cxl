@@ -67,9 +67,15 @@ int main(int argc, char* argv[])
    }
    else if (argc > 1)
    {
-      Sift::Reader reader(argv[1]);
+      Sift::Reader* readerptr = NULL;
+      if (argc > 2 && strcmp(argv[2], "-r") == 0) {
+         // fprintf(stdout, "WHUH %s %s\n", argv[1], argv[3]);
+         readerptr = new Sift::Reader(argv[1], argv[3]);
+      } else {
+         readerptr = new Sift::Reader(argv[1]);
+      }
       //const xed_syntax_enum_t syntax = XED_SYNTAX_ATT;
-
+      Sift::Reader& reader = *readerptr;
       Sift::Instruction inst;
       while(reader.Read(inst))
       {
@@ -78,7 +84,7 @@ int main(int argc, char* argv[])
 #if PIN_REV >= 67254
          //xed_format_context(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr, 0, 0);
 #else
-         //xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
+         // xed_format(syntax, &inst.sinst->xed_inst, buffer, sizeof(buffer) - 1, inst.sinst->addr);
 #endif
          printf("%-40s  ", buffer);
 
@@ -97,6 +103,7 @@ int main(int argc, char* argv[])
          if (inst.is_predicate)
             printf("                 -- %s\n", inst.executed ? "executed" : "not executed");
       }
+      delete readerptr;
    }
    else
    {
