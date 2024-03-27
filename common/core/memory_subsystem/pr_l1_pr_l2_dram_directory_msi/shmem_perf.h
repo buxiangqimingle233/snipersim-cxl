@@ -32,8 +32,11 @@ class ShmemPerf
          DRAM_QUEUE,
          DRAM_BUS,
          DRAM_DEVICE,
+         CXL_LINK,
+         CXTNL_VAT,
+         CXTNL_CMT,
          UNKNOWN,
-         NUM_SHMEM_TIMES
+         NUM_SHMEM_TIMES,
       } shmem_times_type_t;
 
       ShmemPerf();

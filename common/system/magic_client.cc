@@ -6,6 +6,7 @@
 #include "core_manager.h"
 #include "thread.h"
 #include "thread_manager.h"
+#include "performance_model.h"
 
 static UInt64 handleMagic(thread_id_t thread_id, UInt64 cmd, UInt64 arg0 = 0, UInt64 arg1 = 0)
 {
@@ -33,6 +34,7 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
    case SIM_CMD_INSTRUMENT_MODE:
    case SIM_CMD_MHZ_GET:
    case SIM_CMD_SET_THREAD_NAME:
+   case SIM_CMD_CHANGE_MEM_MODE:
       return handleMagic(thread_id, cmd, arg0, arg1);
    case SIM_CMD_PROC_ID:
    {
@@ -47,6 +49,12 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
       return Sim()->getThreadManager()->getNumThreads();
    case SIM_CMD_IN_SIMULATOR:
       return 0;
+   case SIM_GET_EMU_TIME:
+   {
+      UInt64 time_ns = Sim()->getConfig()->getOSEmuTimeStart() * 1000000000 + Sim()->getCoreManager()->getCurrentCore()->getPerformanceModel()->getElapsedTime().getNS();
+                           // + Sim()->getThreadManager()->getThreadFromID(arg0)->getCore()->getPerformanceModel()->getElapsedTime().getNS();
+      return time_ns;
+   }
    default:
       LOG_PRINT_WARNING_ONCE("Encountered unknown magic instruction cmd(%u)", cmd);
       return 1;

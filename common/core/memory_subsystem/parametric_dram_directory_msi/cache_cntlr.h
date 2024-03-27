@@ -239,6 +239,7 @@ namespace ParametricDramDirectoryMSI
            SubsecondTime snoop_latency;
            SubsecondTime qbs_query_latency;
            SubsecondTime mshr_latency;
+           SubsecondTime cxl_cache_overhead;
            UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS

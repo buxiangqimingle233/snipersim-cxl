@@ -3,6 +3,26 @@
 #include "shmem_msg.h"
 #include "shmem_perf.h"
 #include "log.h"
+#include "fixed_types.h"
+
+DramCntlrInterface::DramCntlrInterface(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, UInt32 cache_block_size)
+   : m_memory_manager(memory_manager)
+   , m_shmem_perf_model(shmem_perf_model)
+   , m_cache_block_size(cache_block_size)
+   , cxl_mem_roundtrip(0)
+   , hit_mem_region(0)
+{
+   if (Sim()->getCfg()->hasKey("perf_model/cxl/enabled") && Sim()->getCfg()->getBool("perf_model/cxl/enabled")) {
+      cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
+   }
+   m_ep_agent = new CxTnLMemShim::EPAgent();
+}
+
+DramCntlrInterface::~DramCntlrInterface()
+{
+   delete m_ep_agent;
+}
+
 
 void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2DramDirectoryMSI::ShmemMsg* shmem_msg)
 {
@@ -20,7 +40,7 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          HitWhere::where_t hit_where;
          
          // pass the region from msg to dram-cn
-         add_cxl_mem_overhead = shmem_msg->add_cxl_mem_overhead;
+         hit_mem_region = shmem_msg->hit_mem_region;
          boost::tie(dram_latency, hit_where) = getDataFromDram(address, shmem_msg->getRequester(), data_buf, msg_time, shmem_msg->getPerf());
 
          getShmemPerfModel()->incrElapsedTime(dram_latency, ShmemPerfModel::_SIM_THREAD);

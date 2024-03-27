@@ -1,0 +1,12 @@
+version: '2.2'
+
+services:
+  sniper-dev-container:
+    image: sniper-env:latest
+    volumes:
+      - "/home/wangzhao/snipersim:/home/wangzhao/snipersim"
+      - "/home/wangzhao/experiments:/home/wangzhao/experiments"
+    working_dir: "${PWD}"
+    cap_add:
+      - SYS_PTRACE
+    tty: true

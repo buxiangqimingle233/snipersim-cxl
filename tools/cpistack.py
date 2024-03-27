@@ -230,4 +230,5 @@ if __name__ == '__main__':
   # else:
   #   output_cpistack_text(results)
   output_cpistack_gnuplot(results = results, metric = metric or 'time', outputfile = outputfile, title = title, save_gnuplot_input = save_gnuplot_input)
-  avg_dram_ratio(results)
+  # avg_dram_ratio(results)
+  output_cpistack_table(results, metric = metric or 'cpi')

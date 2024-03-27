@@ -31,10 +31,10 @@ class MemoryManagerBase
       Network* getNetwork() { return m_network; }
       ShmemPerfModel* getShmemPerfModel() { return m_shmem_perf_model; }
 
-      std::vector<core_id_t> getCoreListWithMemoryControllers(void);
       void printCoreListWithMemoryControllers(std::vector<core_id_t>& core_list_with_memory_controllers);
 
    public:
+      std::vector<core_id_t> getCoreListWithMemoryControllers(void);
       MemoryManagerBase(Core* core, Network* network, ShmemPerfModel* shmem_perf_model):
          m_core(core),
          m_network(network),

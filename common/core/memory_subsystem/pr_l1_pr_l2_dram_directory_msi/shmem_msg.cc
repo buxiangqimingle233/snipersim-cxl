@@ -34,7 +34,7 @@ namespace PrL1PrL2DramDirectoryMSI
       m_data_buf(data_buf),
       m_data_length(data_length),
       m_perf(perf),
-      add_cxl_mem_overhead(false)
+      hit_mem_region(0)
    {}
 
    ShmemMsg::ShmemMsg(ShmemMsg* shmem_msg) :
@@ -46,7 +46,7 @@ namespace PrL1PrL2DramDirectoryMSI
       m_data_buf(shmem_msg->getDataBuf()),
       m_data_length(shmem_msg->getDataLength()),
       m_perf(shmem_msg->getPerf()),
-      add_cxl_mem_overhead(shmem_msg->add_cxl_mem_overhead)
+      hit_mem_region(shmem_msg->hit_mem_region)
    {}
 
    ShmemMsg::~ShmemMsg()

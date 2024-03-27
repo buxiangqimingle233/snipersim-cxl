@@ -12,6 +12,9 @@
 #include "network.h"
 #include "cache.h"
 #include "config.h"
+#include "ep_agent.h"
+#include "../core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h"
+// #include "memory_manager_base.h"
 
 #include "log.h"
 
@@ -28,6 +31,25 @@ CoreManager::CoreManager()
       m_cores.push_back(new Core(i));
    }
 
+   // connect each EP agent to all other EP agents
+   std::vector<CxTnLMemShim::EPAgent*> eps;
+   std::vector<core_id_t> core_list_with_dram_controllers = (m_cores[0])->getMemoryManager()->getCoreListWithMemoryControllers();
+
+   for (auto& c: core_list_with_dram_controllers) {
+      CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(m_cores[c]->getMemoryManager()))->getDramCntlr()->getEPAgent();
+      ep->setCoreID(c);
+      eps.push_back(ep);
+   }
+
+   for (auto& ep: eps) {
+      for (auto other: eps){
+         if (ep != other) {
+            ep->appendPeerAgent(other);
+         }
+      }
+   }
+
+   // Link all EP-Agents
    LOG_PRINT("Finished CoreManager Constructor.");
 }
 

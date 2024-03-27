@@ -68,6 +68,8 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
    LOG_PRINT("Got Syscall: %i", syscall_number);
    CLOG("syscall", "Enter thread %d core %d syscall %" PRIdPTR, m_thread->getId(), core->getId(), syscall_number);
 
+   // printf("syscall", "Enter thread %d core %d syscall %" PRIdPTR, m_thread->getId(), core->getId(), syscall_number);
+
    m_syscall_number = syscall_number;
    m_in_syscall = true;
    m_syscall_args = args;
@@ -290,7 +292,7 @@ bool SyscallMdl::runEnter(IntPtr syscall_number, syscall_args_t &args)
          break;
       }
 
-      case -1:
+      case (long unsigned int)-1:
       default:
          break;
    }

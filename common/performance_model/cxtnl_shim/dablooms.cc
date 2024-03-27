@@ -122,10 +122,10 @@ int bitmap_increment(bitmap_t *bitmap, unsigned int index, long offset)
         n = (n & 0x0f) + ((n & 0xf0) + 0x10);
     }
     
-    if (temp == 0x0f) {
-        fprintf(stderr, "Error, 4 bit int Overflow\n");
-        return -1;
-    }
+    // if (temp == 0x0f) {
+    //     // fprintf(stderr, "Error, 4 bit int Overflow\n");
+    //     return -1;
+    // }
     
     bitmap->array[access] = n;
     return 0;
@@ -233,6 +233,41 @@ counting_bloom_t *counting_bloom_init(unsigned int capacity, double error_rate, 
     return bloom;
 }
 
+void print_counting_bloom_fill_rate(counting_bloom_t* bloom) {
+    int i;
+    int total = 0;
+    for (i = 0; i < bloom->size; i++) {
+        if (bitmap_check(bloom->bitmap, i, bloom->offset) > 0) {
+            total++;
+        }
+    }
+    printf("Bloom Fill Ratio: %ld/%ld\n", total, bloom->size);
+    printf("Error Rate: %f\n", bloom->error_rate);
+    // printf("Fill rate: %f\n", (float)total / bloom->size);
+}
+
+counting_bloom_t *counting_bloom_init_nfunc(unsigned int capacity, int nfunc, long offset)
+{
+    counting_bloom_t *bloom;
+    
+    if ((bloom = (counting_bloom_t*) malloc(sizeof(counting_bloom_t))) == NULL) {
+        fprintf(stderr, "Error, could not realloc a new bloom filter\n");
+        return NULL;
+    }
+    bloom->bitmap = NULL;
+    bloom->capacity = capacity;
+    bloom->error_rate = 1 / pow(2, nfunc);;
+    bloom->offset = offset + sizeof(counting_bloom_header_t);
+    bloom->nfuncs = nfunc;
+    bloom->counts_per_func = (int) ceil(capacity * fabs(log(bloom->error_rate)) / (bloom->nfuncs * pow(log(2), 2)));
+    bloom->size = bloom->nfuncs * bloom->counts_per_func;
+    /* rounding-up integer divide by 2 of bloom->size */
+    bloom->num_bytes = ((bloom->size + 1) / 2) + sizeof(counting_bloom_header_t);
+    bloom->hashes = (uint32_t*) calloc(bloom->nfuncs, sizeof(uint32_t));
+    
+    return bloom;
+}
+
 counting_bloom_t *new_counting_bloom(unsigned int capacity, double error_rate, const char *filename)
 {
     counting_bloom_t *cur_bloom;
@@ -245,6 +280,23 @@ counting_bloom_t *new_counting_bloom(unsigned int capacity, double error_rate, c
     }
     
     cur_bloom = counting_bloom_init(capacity, error_rate, 0);
+    cur_bloom->bitmap = new_bitmap(fd, cur_bloom->num_bytes);
+    cur_bloom->header = (counting_bloom_header_t *)(cur_bloom->bitmap->array);
+    return cur_bloom;
+}
+
+counting_bloom_t *new_counting_bloom_nfunc(unsigned int capacity, int nfunc, const char *filename)
+{
+    counting_bloom_t *cur_bloom;
+    int fd;
+    
+    if ((fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600)) < 0) {
+        perror("Error, Opening File Failed");
+        fprintf(stderr, " %s \n", filename);
+        return NULL;
+    }
+    
+    cur_bloom = counting_bloom_init_nfunc(capacity, nfunc, 0);
     cur_bloom->bitmap = new_bitmap(fd, cur_bloom->num_bytes);
     cur_bloom->header = (counting_bloom_header_t *)(cur_bloom->bitmap->array);
     return cur_bloom;

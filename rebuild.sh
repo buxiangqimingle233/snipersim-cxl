@@ -1,1 +1,1 @@
-make DEBUG=1 -j 
+make clean && make DEBUG=1 -j 

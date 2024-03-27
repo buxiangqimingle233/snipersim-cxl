@@ -1,11 +1,13 @@
 #include "dram_cntlr.h"
-#include "memory_manager.h"
+// #include "../parametric_dram_directory_msi/memory_manager.h"
 #include "core.h"
 #include "log.h"
 #include "subsecond_time.h"
 #include "stats.h"
 #include "fault_injection.h"
 #include "shmem_perf.h"
+#include "ep_agent.h"
+#include "cxtnl_shim.h"
 
 #if 0
    extern Lock iolock;
@@ -27,6 +29,7 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    : DramCntlrInterface(memory_manager, shmem_perf_model, cache_block_size)
    , m_reads(0)
    , m_writes(0)
+   , m_cxl_mem_overhead(SubsecondTime::Zero())
 {
    m_dram_perf_model = DramPerfModel::createDramPerfModel(
          memory_manager->getCore()->getId(),
@@ -39,7 +42,7 @@ DramCntlr::DramCntlr(MemoryManagerBase* memory_manager,
    m_dram_access_count = new AccessCountMap[DramCntlrInterface::NUM_ACCESS_TYPES];
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "reads", &m_reads);
    registerStatsMetric("dram", memory_manager->getCore()->getId(), "writes", &m_writes);
-
+   registerStatsMetric("dram", memory_manager->getCore()->getId(), "cxl-mem-overhead", &m_cxl_mem_overhead);
 }
 
 DramCntlr::~DramCntlr()
@@ -68,20 +71,46 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
       memcpy((void*) data_buf, (void*) m_data_map[address], getCacheBlockSize());
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf);
-   if (add_cxl_mem_overhead) {
-      dram_access_latency += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
-      perf->updateTime(now + dram_access_latency, ShmemPerf::DRAM_DEVICE);
+   // RC -- EP
+   if (hit_mem_region & WITH_CXL_MEM) {
+      SubsecondTime cxl_link_latency = SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+      now += cxl_link_latency;     
+
+      perf->updateTime(now, ShmemPerf::CXL_LINK);     // update shmemPerf
+      m_dram_perf_model->increaseAccessLatency(cxl_link_latency);   // update dramPerfModel
+      m_cxl_mem_overhead += cxl_link_latency;  // update sqlite
    }
+
+   // EP -- EP Memory Controller
+   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+      IntPtr dram_address = 0;
+#ifdef RECORD_CXL_TRACE
+      SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, READ, dram_address);
+#else
+      SubsecondTime view_address_translate_latency = m_ep_agent->Translate(address, requester, READ, dram_address);
+#endif
+      now += view_address_translate_latency;
+
+      perf->updateTime(now, ShmemPerf::CXTNL_VAT);
+      m_dram_perf_model->increaseAccessLatency(view_address_translate_latency);
+      m_cxl_mem_overhead += view_address_translate_latency;
+   }
+
+   // EP Memory Controller -- DRAM
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, READ, perf);
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
-   addToDramAccessCount(address, READ);
+   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+      addToDramAccessCount(address, READ);
+   }
+   // addToDramAccessCount(address, READ);
    #endif
    MYLOG("R @ %08lx latency %s", address, itostr(dram_access_latency).c_str());
 
    return boost::tuple<SubsecondTime, HitWhere::where_t>(dram_access_latency, HitWhere::DRAM);
 }
+
 
 boost::tuple<SubsecondTime, HitWhere::where_t>
 DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
@@ -99,15 +128,40 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
          m_fault_injector->postWrite(address, address, getCacheBlockSize(), (Byte*)m_data_map[address], now);
    }
 
-   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, &m_dummy_shmem_perf);
-   if (add_cxl_mem_overhead) {
-      dram_access_latency += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
-      m_dummy_shmem_perf.updateTime(now + dram_access_latency, ShmemPerf::DRAM_DEVICE);
+   // RC -- EP
+   if ((hit_mem_region & WITH_CXL_MEM)) {
+      SubsecondTime cxl_link_latency = SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+      now += cxl_link_latency;     
+
+      m_dummy_shmem_perf.updateTime(now, ShmemPerf::CXL_LINK);     // update shmemPerf
+      m_dram_perf_model->increaseAccessLatency(cxl_link_latency);   // update dramPerfModel
+      m_cxl_mem_overhead += cxl_link_latency;  // update sqlite
    }
+
+   // EP -- EP Memory Controller
+   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+      IntPtr dram_address = 0;
+#ifdef RECORD_CXL_TRACE
+      SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, WRITE, dram_address);
+#else
+      SubsecondTime view_address_translate_latency = m_ep_agent->Translate(address, requester, WRITE, dram_address);
+#endif
+      now += view_address_translate_latency;
+
+      m_dummy_shmem_perf.updateTime(now, ShmemPerf::CXTNL_VAT);      // FIXME: Write not on the critical path ? 
+      m_dram_perf_model->increaseAccessLatency(view_address_translate_latency);
+      m_cxl_mem_overhead += view_address_translate_latency;
+   }
+
+   // EP Memory Controller -- DRAM
+   SubsecondTime dram_access_latency = runDramPerfModel(requester, now, address, WRITE, &m_dummy_shmem_perf);
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
-   addToDramAccessCount(address, WRITE);
+   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+      addToDramAccessCount(address, WRITE);
+   }
+   // addToDramAccessCount(address, WRITE);
    #endif
    MYLOG("W @ %08lx", address);
 
@@ -133,6 +187,7 @@ DramCntlr::printDramAccessCount()
 {
    for (UInt32 k = 0; k < DramCntlrInterface::NUM_ACCESS_TYPES; k++)
    {
+      std::cout << m_dram_access_count[k].size() << " " << ((k == READ)? "READ" : "WRITE") << " accesses" << std::endl;
       for (AccessCountMap::iterator i = m_dram_access_count[k].begin(); i != m_dram_access_count[k].end(); i++)
       {
          if ((*i).second > 100)

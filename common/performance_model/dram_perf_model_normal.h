@@ -16,15 +16,18 @@ class DramPerfModelNormal : public DramPerfModel
       ComponentBandwidth m_dram_bandwidth;
 
       SubsecondTime m_total_queueing_delay;
-      SubsecondTime m_total_access_latency;
 
    public:
+      SubsecondTime m_total_access_latency;
       DramPerfModelNormal(core_id_t core_id,
             UInt32 cache_block_size);
 
       ~DramPerfModelNormal();
 
       SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
+      void increaseAccessLatency(SubsecondTime pkt_time) {
+         m_total_access_latency += pkt_time;
+      }
 };
 
 #endif /* __DRAM_PERF_MODEL_NORMAL_H__ */

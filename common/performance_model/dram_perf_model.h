@@ -31,6 +31,7 @@ class DramPerfModel
       DramPerfModel(core_id_t core_id, UInt64 cache_block_size) : m_enabled(false), m_num_accesses(0) {}
       virtual ~DramPerfModel() {}
       virtual SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf) = 0;
+      virtual void increaseAccessLatency(SubsecondTime pkt_time) = 0;
       void enable() { m_enabled = true; }
       void disable() { m_enabled = false; }
 

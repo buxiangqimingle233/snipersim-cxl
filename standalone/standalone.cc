@@ -7,12 +7,12 @@
 #include "exceptions.h"
 #include "sim_api.h"
 
-#define DEBUG 1
+// #define DEBUG 1
 
 int main(int argc, char* argv[])
 {
 
-   #ifdef DEBUG
+   #if DEBUG
       std::cout<<"Please attach debugger to process: "<< getpid() <<std::endl;
       std::cin.get();
    #endif

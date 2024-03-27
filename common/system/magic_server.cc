@@ -12,6 +12,7 @@
 #include "timer.h"
 #include "thread.h"
 #include "../core/memory_subsystem/parametric_dram_directory_msi/memory_manager.h"
+#include "cxtnl_shim.h"
 
 MagicServer::MagicServer()
       : m_performance_enabled(false)
@@ -61,10 +62,11 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          {
             return 0;
          }
-      case SIM_CMD_MHZ_SET:
+      case SIM_CMD_MHZ_SET:   // Backward Compability with old codes (hack with MHZ_SET to change memory mode)
+      case SIM_CMD_CHANGE_MEM_MODE:
          // Hacked
          // return setFrequency(arg0, arg1);
-         return changeMemoryModelMode(core_id, arg1);
+         return changeMemoryModelMode(core_id, arg0);
       case SIM_CMD_NAMED_MARKER:
       {
          char str[256];
@@ -208,11 +210,11 @@ UInt64 MagicServer::changeMemoryModelMode(UInt64 core_id, UInt64 where) {
    ParametricDramDirectoryMSI::MemoryManager* m_memory_manager = static_cast<ParametricDramDirectoryMSI::MemoryManager*>(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager());
    assert(m_memory_manager != NULL);
    MEMORY_REGION masked_where = DEFAULT;
-   if (((where & SHARED_L2) && !(where & LONG_LATENCY)) || (where > (SHARED_L2 | LONG_LATENCY))) {
+   if (((where & WITH_CXL_BNISP) && !(where & WITH_CXL_MEM)) || (where > (WITH_CXL_BNISP | WITH_CXL_MEM))) {
       printf("[SNIPER ERROR] unsupported memory region %ld\n", where);
    } else {
-      printf("[SNIPER] change memory mode of core %ld to %ld\n", core_id, where);
-      masked_where = (where & SHARED_L2) | (where & LONG_LATENCY);      // mask
+      // printf("[SNIPER] change memory mode of core %ld to %ld\n", core_id, where);
+      masked_where = (where & WITH_CXL_BNISP) | (where & WITH_CXL_MEM);      // mask
    }
    m_memory_manager->setMemoryRegion(masked_where);
    return 0;

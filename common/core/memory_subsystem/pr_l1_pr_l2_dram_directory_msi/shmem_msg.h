@@ -53,7 +53,7 @@ namespace PrL1PrL2DramDirectoryMSI
 
 
       public:
-         bool add_cxl_mem_overhead;
+         int hit_mem_region;
          ShmemMsg() = delete;
          ShmemMsg(ShmemPerf* perf);
          ShmemMsg(msg_t msg_type,

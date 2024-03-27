@@ -116,10 +116,10 @@ void Sift::Writer::initResponse()
    if (!response)
    {
      sift_assert(strcmp(m_response_filename, "") != 0);
-     printf("%s\n", m_response_filename);
+   //   printf("%s\n", m_response_filename);
      response = new vifstream(m_response_filename, std::ios::in);
    //   response = new vifstream(m_response_filename, std::ios::in | std::ios::out | std::ios::app);
-     std::cerr << "Error: " << strerror(errno) << " " << getpid();
+   //   std::cerr << "Error: " << strerror(errno) << " " << getpid();
      sift_assert(!response->fail());
    }
 }

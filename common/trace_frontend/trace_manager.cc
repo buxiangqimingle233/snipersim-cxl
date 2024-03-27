@@ -327,6 +327,7 @@ void TraceManager::accessMemory(int core_id, Core::lock_signal_t lock_signal, Co
          return;
       }
    }
+   // FIXME: this function seems to incur segmentation fault in log.cc, maybe because of the corresponding thead being already killed?
    LOG_PRINT_ERROR("Unable to find core %d", core_id);
 }
 

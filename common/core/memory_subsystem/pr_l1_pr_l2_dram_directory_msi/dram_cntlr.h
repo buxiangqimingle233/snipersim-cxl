@@ -1,7 +1,7 @@
 #pragma once
 
 // Define to re-enable DramAccessCount
-//#define ENABLE_DRAM_ACCESS_COUNT
+#define ENABLE_DRAM_ACCESS_COUNT
 
 #include <unordered_map>
 
@@ -12,6 +12,7 @@
 #include "memory_manager_base.h"
 #include "dram_cntlr_interface.h"
 #include "subsecond_time.h"
+#include "ep_agent.h"
 
 class FaultInjector;
 
@@ -27,6 +28,7 @@ namespace PrL1PrL2DramDirectoryMSI
          typedef std::unordered_map<IntPtr,UInt64> AccessCountMap;
          AccessCountMap* m_dram_access_count;
          UInt64 m_reads, m_writes;
+         SubsecondTime m_cxl_mem_overhead;
 
          ShmemPerf m_dummy_shmem_perf;
 

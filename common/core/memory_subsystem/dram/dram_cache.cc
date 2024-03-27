@@ -77,11 +77,12 @@ DramCache::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
 {
    std::pair<bool, SubsecondTime> res = doAccess(Cache::LOAD, address, requester, data_buf, now, perf);
 
-   if (add_cxl_mem_overhead) {
-      res.second += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
-      perf->updateTime(now + res.second, ShmemPerf::DRAM_DEVICE);
-      add_cxl_mem_overhead = false;    // reset
-   }
+   // Stale codes
+   // if (hit_mem_region) {
+   //    res.second += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+   //    perf->updateTime(now + res.second, ShmemPerf::DRAM_DEVICE);
+   //    hit_mem_region = false;    // reset
+   // }
 
    if (!res.first)
       ++m_read_misses;
@@ -94,9 +95,11 @@ boost::tuple<SubsecondTime, HitWhere::where_t>
 DramCache::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
 {
    std::pair<bool, SubsecondTime> res = doAccess(Cache::STORE, address, requester, data_buf, now, NULL);
-   if (add_cxl_mem_overhead) {
-      res.second += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
-   }
+
+   // Stale Codes
+   // if (hit_mem_region) {
+   //    res.second += SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
+   // }
 
    if (!res.first)
       ++m_write_misses;

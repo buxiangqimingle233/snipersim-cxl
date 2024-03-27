@@ -30,6 +30,9 @@ class DramPerfModelHybrid : public DramPerfModel
 
         SubsecondTime getAccessLatency(SubsecondTime pkt_time, UInt64 pkt_size, core_id_t requester, \
             IntPtr address, DramCntlrInterface::access_t access_type, ShmemPerf *perf);
+        void increaseAccessLatency(SubsecondTime pkt_time) {
+            m_total_access_latency += pkt_time;
+        }
 };
 
 

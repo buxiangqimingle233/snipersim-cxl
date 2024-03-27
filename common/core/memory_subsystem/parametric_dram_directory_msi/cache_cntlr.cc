@@ -238,6 +238,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "qbs-query-latency", &stats.qbs_query_latency);
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
+   registerStatsMetric(name, core_id, "cxl-cache-overhead", &stats.cxl_cache_overhead);
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
       registerStatsMetric(name, core_id, String("loads-")+CStateString(state), &stats.loads_state[state]);
       registerStatsMetric(name, core_id, String("stores-")+CStateString(state), &stats.stores_state[state]);
@@ -864,12 +865,6 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          }
       }
 
-      // Coherence requests on L2 caches will traverse the CXL link, causing the 2x CXL.cache roundtrip lantency
-      SubsecondTime cxl_latency = SubsecondTime::Zero();
-      if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & SHARED_L2)) {
-         cxl_latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-      }
-
       if (mem_op_type != Core::READ) // write that hits
       {
          /* Invalidate/flush in previous levels */
@@ -879,7 +874,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             if (*it != requester)
             {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
+               latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
             }
          }
@@ -898,7 +893,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
+               latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
             }
          }
@@ -914,7 +909,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++) {
             if (*it != requester) {
                std::pair<SubsecondTime, bool> res = (*it)->updateCacheBlock(address, CacheState::SHARED, Transition::COHERENCY, NULL, ShmemPerfModel::_USER_THREAD);
-               latency = getMax<SubsecondTime>(latency, res.first + cxl_latency);
+               latency = getMax<SubsecondTime>(latency, res.first);
                sibling_hit |= res.second;
             }
          }
@@ -940,6 +935,9 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
       if (modeled)
          getMemoryManager()->incrElapsedTime(m_mem_component, CachePerfModel::ACCESS_CACHE_TAGS, ShmemPerfModel::_USER_THREAD);
 
+      // Coherence requests on L3 caches will traverse the CXL link, causing the 2x CXL.cache roundtrip lantency
+      // Miss & CC upgrade incur cxl.cache both
+
       if (cache_block_info && (cache_block_info->getCState() == CacheState::SHARED))
       {
          // Data is present, but still no cache_hit => this is a write on a SHARED block. Do Upgrade
@@ -947,6 +945,13 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
             if (*it != requester)
                latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
+
+         // We assume parallel snooping, thus only incurs one cxl.cache roundtrip
+         if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
+            latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+         }
+
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
          #ifdef ENABLE_TRACK_SHARING_PREVCACHES
@@ -980,6 +985,12 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             for(CacheCntlrList::iterator it = m_master->m_prev_cache_cntlrs.begin(); it != m_master->m_prev_cache_cntlrs.end(); it++)
                if (*it != requester)
                   latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
+
+            if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
+               latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+               atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+            }
+
             getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
             atomic_add_subsecondtime(stats.snoop_latency, latency);
             #ifdef ENABLE_TRACK_SHARING_PREVCACHES
@@ -1011,6 +1022,16 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
 
                // Do the DRAM access and increment local time
                boost::tie<HitWhere::where_t, SubsecondTime>(hit_where, latency) = accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
+
+               // FIXME: LLC do not have next_level_cache to resolve coherence between different shards, we consequently assume a CXL dirctory implementation 
+               // so that each LLC miss will issue a directory tag lookup, which takes cxl_cache_roundtrip ns.
+               // This may enlarge the effect of cxl_cache_overhead, to precisely estimate it, we need a dummy L4 cache to resolve LLC's coherency 
+               if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
+                  latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+                  atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+                  atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
+               }
+
                getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
 
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
@@ -1024,6 +1045,16 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          else
          {
             initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
+
+            // Similar problem 
+            SubsecondTime latency = SubsecondTime::Zero();
+            if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
+               latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+               atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+               atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
+               // printf("HIT 1055\n");
+            }
+            getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          }
       }
    }
@@ -1130,8 +1161,8 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
    SubsecondTime dram_latency;
    HitWhere::where_t hit_where;
 
-   if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & LONG_LATENCY)) {
-      m_master->m_dram_cntlr->add_cxl_mem_overhead = true;
+   if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() != DEFAULT)) {
+      m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getMemoryRegion();
    }
    switch (mem_op_type)
    {

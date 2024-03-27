@@ -14,16 +14,18 @@
 #include "shared_cache_block_info.h"
 #include "subsecond_time.h"
 
+#include "cxtnl_shim.h"
 #include <map>
 
 class DramCache;
 class ShmemPerf;
 
 
-typedef uint32_t MEMORY_REGION;
-#define DEFAULT (0)
-#define SHARED_L2 (1 << 2)
-#define LONG_LATENCY (1 << 1)
+// typedef uint32_t MEMORY_REGION;
+// #define DEFAULT (0)
+// #define WITH_CXL_BNISP (1 << 2)
+// #define WITH_CXL_MEM (1 << 1)
+// #define PREFIX (1 << 30)
 
 namespace ParametricDramDirectoryMSI
 {

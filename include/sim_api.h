@@ -17,10 +17,16 @@
 #define SIM_CMD_NUM_THREADS     12
 #define SIM_CMD_NAMED_MARKER    13
 #define SIM_CMD_SET_THREAD_NAME 14
+#define SIM_CMD_CHANGE_MEM_MODE 15
+#define SIM_GET_EMU_TIME        16
 
 #define SIM_OPT_INSTRUMENT_DETAILED    0
 #define SIM_OPT_INSTRUMENT_WARMUP      1
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
+
+#define CXL_STRONG_SNIPER_MODE ((1 << 2) | (1 << 1))
+#define CXL_WEAK_SNIPER_MODE (1 << 1)
+#define LOCAL_SNIPER_MODE (0)
 
 #if defined(__aarch64__)
 
@@ -131,5 +137,13 @@
 #define SimUser(cmd, arg)         SimMagic2(SIM_CMD_USER, cmd, arg)
 #define SimSetInstrumentMode(opt) SimMagic1(SIM_CMD_INSTRUMENT_MODE, opt)
 #define SimInSimulator()          (SimMagic0(SIM_CMD_IN_SIMULATOR)!=SIM_CMD_IN_SIMULATOR)
+
+#define SimAccessCXLType2()         SimMagic1(SIM_CMD_CHANGE_MEM_MODE, CXL_STRONG_SNIPER_MODE)
+#define SimAccessCXLType3()         SimMagic1(SIM_CMD_CHANGE_MEM_MODE, CXL_WEAK_SNIPER_MODE)
+#define SimAccessLocal()            SimMagic1(SIM_CMD_CHANGE_MEM_MODE, LOCAL_SNIPER_MODE)
+#define SimAccessReset()            SimMagic1(SIM_CMD_CHANGE_MEM_MODE, LOCAL_SNIPER_MODE)
+
+#define SimGetEmuTime()             SimMagic0(SIM_GET_EMU_TIME)
+
 
 #endif /* __SIM_API */
