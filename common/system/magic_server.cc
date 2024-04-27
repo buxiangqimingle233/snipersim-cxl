@@ -67,6 +67,11 @@ UInt64 MagicServer::Magic_unlocked(thread_id_t thread_id, core_id_t core_id, UIn
          // Hacked
          // return setFrequency(arg0, arg1);
          return changeMemoryModelMode(core_id, arg0);
+      case SIM_SYNC_WRITE:
+         return enqueueWriteToSync(thread_id, core_id, arg0, arg1);
+      case SIM_FLUSH_WQ: 
+         flushWriteQueue(thread_id, core_id);
+         return 0;
       case SIM_CMD_NAMED_MARKER:
       {
          char str[256];
@@ -166,7 +171,9 @@ void MagicServer::disablePerformance()
    PinDetach();
 }
 
+
 void print_allocations();
+
 
 UInt64 MagicServer::setPerformance(bool enabled)
 {
@@ -206,18 +213,36 @@ UInt64 MagicServer::setPerformance(bool enabled)
    return 0;
 }
 
+
 UInt64 MagicServer::changeMemoryModelMode(UInt64 core_id, UInt64 where) {
    ParametricDramDirectoryMSI::MemoryManager* m_memory_manager = static_cast<ParametricDramDirectoryMSI::MemoryManager*>(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager());
    assert(m_memory_manager != NULL);
-   MEMORY_REGION masked_where = DEFAULT;
-   if (((where & WITH_CXL_BNISP) && !(where & WITH_CXL_MEM)) || (where > (WITH_CXL_BNISP | WITH_CXL_MEM))) {
-      printf("[SNIPER ERROR] unsupported memory region %ld\n", where);
+   // MEMORY_REGION mask = WITH_CXL_BNISP | WITH_CXL_MEM | CXL_TRACK_READ | CXL_TRACK_WRITE;
+   if ((where & WITH_CXL_BNISP) && !(where & WITH_CXL_MEM)) {
+      // printf("[SNIPER ERROR] unsupported memory region %ld\n", where);
    } else {
       // printf("[SNIPER] change memory mode of core %ld to %ld\n", core_id, where);
-      masked_where = (where & WITH_CXL_BNISP) | (where & WITH_CXL_MEM);      // mask
+      where = where & CXL_MASK;
    }
-   m_memory_manager->setMemoryRegion(masked_where);
+   m_memory_manager->setMemoryRegion(where);
    return 0;
+}
+
+
+UInt64 MagicServer::enqueueWriteToSync(UInt64 thread_id, UInt64 core_id, UInt64 address, UInt64 size) {
+   IntPtr pa = Sim()->getThreadManager()->getThreadFromID(thread_id)->va2pa(address);
+   ParametricDramDirectoryMSI::MemoryManager* manager = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager()));
+   core_id_t homeid = manager->getTagDirectoryHomeLookup()->getHome(pa, core_id);
+   CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(homeid)->getMemoryManager()))->getDramCntlr()->getEPAgent();
+   ep->AppendWorkQueueElement({pa, size, (core_id_t)core_id});
+   ep->dequeueWorkQueue();
+   return 0;
+}
+
+
+void MagicServer::flushWriteQueue(UInt64 thread_id, UInt64 core_id) {
+   // PrL1PrL2DramDirectoryMSI::DramCntlr* ctrl = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager()))->getDramCntlr();
+   // SubsecondTime latency = ctrl->getEPAgent()->dequeueWorkQueue();     // TODO: We should add this time to the performance model
 }
 
 
@@ -265,7 +290,7 @@ UInt64 MagicServer::setInstrumentationMode(UInt64 sim_api_opt)
       inst_mode = InstMode::DETAILED;
       break;
    case SIM_OPT_INSTRUMENT_WARMUP:
-      inst_mode = InstMode::CACHE_ONLY;
+      inst_mode = InstMode::CACHE_ONLY; 
       break;
    case SIM_OPT_INSTRUMENT_FASTFORWARD:
       inst_mode = InstMode::FAST_FORWARD;

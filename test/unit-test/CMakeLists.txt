@@ -41,7 +41,7 @@ file(GLOB_RECURSE all_source_files
 add_library(ep_agent STATIC ${all_source_files})
 
 # Add the test executable
-add_executable(test1 test_ep_agent.cc)
+add_executable(test1 unit_test.cc)
 
 # Add debug flags to the targets
 target_compile_options(ep_agent PRIVATE -g -O0)

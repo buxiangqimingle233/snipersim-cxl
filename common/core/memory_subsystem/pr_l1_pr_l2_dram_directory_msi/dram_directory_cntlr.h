@@ -33,9 +33,11 @@ namespace PrL1PrL2DramDirectoryMSI
          ShmemPerf m_dummy_shmem_perf;
 
          CoherencyProtocol::type_t m_protocol;
-
          UInt64 evict[DirectoryState::NUM_DIRECTORY_STATES];
          UInt64 forward, forward_failed;
+
+         unsigned int cxl_cache_roundtrip;
+         SubsecondTime cxl_cache_overhead;
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          MemoryManagerBase* getMemoryManager() { return m_memory_manager; }
@@ -56,8 +58,8 @@ namespace PrL1PrL2DramDirectoryMSI
          void processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
-         void sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, bool count);
-         void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now);
+         void sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, bool count, ShmemMsg* shmem_msg);
+         void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* shmem_msg);
 
          void updateShmemPerf(ShmemReq *shmem_req, ShmemPerf::shmem_times_type_t reason = ShmemPerf::UNKNOWN)
          {

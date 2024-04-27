@@ -240,6 +240,7 @@ namespace ParametricDramDirectoryMSI
            SubsecondTime qbs_query_latency;
            SubsecondTime mshr_latency;
            SubsecondTime cxl_cache_overhead;
+           UInt64 cxl_mem_read_cnt, cxl_mem_write_cnt;
            UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS
@@ -351,7 +352,8 @@ namespace ParametricDramDirectoryMSI
          Semaphore* getNetworkThreadSemaphore(void);
 
          // Dram Directory Home Lookup
-         core_id_t getHome(IntPtr address) { return m_tag_directory_home_lookup->getHome(address); }
+         // core_id_t getHome(IntPtr address) { return m_tag_directory_home_lookup->getHome(address); }
+         core_id_t getHome(IntPtr address, core_id_t requester) { return m_tag_directory_home_lookup->getHome(address, requester); }
 
          CacheCntlr* lastLevelCache(void);
 
@@ -373,6 +375,13 @@ namespace ParametricDramDirectoryMSI
 
          Cache* getCache() { return m_master->m_cache; }
          Lock& getLock() { return m_master->m_cache_lock; }
+         DramCntlrInterface* getMasterDramCntlr() { 
+            if (m_master->m_dram_cntlr) {
+               return m_master->m_dram_cntlr;
+            } else {
+               return NULL;
+            }
+         }
 
          void setPrevCacheCntlrs(CacheCntlrList& prev_cache_cntlrs);
          void setNextCacheCntlr(CacheCntlr* next_cache_cntlr) { m_next_cache_cntlr = next_cache_cntlr; }

@@ -1,0 +1,4 @@
+/home/wangzhao/snipersim/test/unit-test/build/CMakeFiles/edit_cache.dir
+/home/wangzhao/snipersim/test/unit-test/build/CMakeFiles/test1.dir
+/home/wangzhao/snipersim/test/unit-test/build/CMakeFiles/rebuild_cache.dir
+/home/wangzhao/snipersim/test/unit-test/build/CMakeFiles/ep_agent.dir

@@ -1,3 +1,4 @@
+/*
 #ifndef __NUMA_BALANCER_H__
 #define __NUMA_BALANCER_H__
 
@@ -65,3 +66,4 @@ public:
 };
 
 #endif
+*/

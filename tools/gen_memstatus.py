@@ -169,18 +169,36 @@ def generate_mem_count(jobid = None, resultsdir = None, partial = None, output =
 
   def get_avg(name):
     l = list(filter(lambda x: x > 0 and x != float('inf'), results[name]))
-    return sum(l) / len(l)
+    if l:
+      return sum(l) / len(l)
+    else:
+      return 0
 
-  lines = []
-  names = ["L3.loads", "L3.load-misses", "L1-D.loads-where-dram", "L1-D.loads-where-cache-remote", "L1-D.loads", "L1-D.load-misses"]
+  def getsum(name):
+    return sum(list(filter(lambda x: x > 0 and x != float('inf'), results[name])))
+
+  lines = {}
+  names = ["L3.loads", "L3.stores", "L3.load-misses", "L3.store-misses", "L1-D.loads-where-dram", \
+      "L1-D.loads-where-cache-remote", "L1-D.loads", "L1-D.load-misses", "L3.cxl-cache-overhead", "directory.cxl-cache-overhead", "dram.cxl-mem-overhead", \
+      "network.shmem-1.bus.num-packets", "directory.entries-allocated",\
+      "L1-D.cxl-mem-read-cnt", "L1-D.cxl-mem-write-cnt"]
   for n in names:
-    lines.append(float(get_avg(n)))
+    lines[n] = float(getsum(n))
 
   printed_lines = {
-    "load-hit-l1": lines[-2] - lines[-1] ,
-    "load-hit-l3": lines[0] - lines[1], 
-    "load-from-dram": lines[2],
-    "load-from-remote-cache": lines[3]
+    "load-hit-l1": lines["L1-D.loads"] - lines["L1-D.load-misses"],
+    "load-hit-l3": lines["L3.loads"] - lines["L3.load-misses"], 
+    "l3-access": lines["L3.loads"] + lines["L3.stores"],
+    "l3-miss-rate": (lines["L3.load-misses"] + lines["L3.store-misses"]) / (lines["L3.loads"] + lines["L3.stores"]),
+    "load-from-dram": lines["L1-D.loads-where-dram"],
+    "load-from-remote-cache": lines["L1-D.loads-where-cache-remote"],
+    "l3-cxl-cache-overhead": lines["L3.cxl-cache-overhead"] / 1e6,
+    "directory-cxl-cache-overhead": lines["directory.cxl-cache-overhead"] / 1e6,
+    "cxl-mem-overhead": lines["dram.cxl-mem-overhead"] / 1e6,
+    "bus-packets": lines["network.shmem-1.bus.num-packets"],
+    "entries-allocated": lines["directory.entries-allocated"],
+    "cxl-mem-read-cnt": lines["L1-D.cxl-mem-read-cnt"],
+    "cxl-mem-write-cnt": lines["L1-D.cxl-mem-write-cnt"]
   }
 
   for n, l in printed_lines.items():

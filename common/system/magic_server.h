@@ -27,6 +27,8 @@ class MagicServer
       UInt64 setFrequency(UInt64 core_number, UInt64 freq_in_mhz);
       UInt64 getFrequency(UInt64 core_number);
       UInt64 changeMemoryModelMode(UInt64 core_id, UInt64 where);
+      UInt64 enqueueWriteToSync(UInt64 thread_id, UInt64 core_id, UInt64 address, UInt64 size);
+      void flushWriteQueue(UInt64 thread_id, UInt64 core_id);
 
       void enablePerformance();
       void disablePerformance();

@@ -72,7 +72,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
    }
 
    // RC -- EP
-   if (hit_mem_region & WITH_CXL_MEM) {
+   if ((hit_mem_region & WITH_CXL_MEM) && IS_TRACKED_READ(hit_mem_region)) {
       SubsecondTime cxl_link_latency = SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
       now += cxl_link_latency;     
 
@@ -82,7 +82,7 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
    }
 
    // EP -- EP Memory Controller
-   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+   if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_READ(hit_mem_region)) {
       IntPtr dram_address = 0;
 #ifdef RECORD_CXL_TRACE
       SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, READ, dram_address);
@@ -101,13 +101,16 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
 
    ++m_reads;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
-   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+   if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_READ(hit_mem_region)) {
       addToDramAccessCount(address, READ);
    }
    // addToDramAccessCount(address, READ);
    #endif
    MYLOG("R @ %08lx latency %s", address, itostr(dram_access_latency).c_str());
 
+
+   // Set region back to default, since region changes are done per instructions
+   hit_mem_region = DEFAULT;
    return boost::tuple<SubsecondTime, HitWhere::where_t>(dram_access_latency, HitWhere::DRAM);
 }
 
@@ -129,7 +132,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
    }
 
    // RC -- EP
-   if ((hit_mem_region & WITH_CXL_MEM)) {
+   if ((hit_mem_region & WITH_CXL_MEM) && IS_TRACKED_WRITE(hit_mem_region)) {
       SubsecondTime cxl_link_latency = SubsecondTime::NSfromFloat(cxl_mem_roundtrip);
       now += cxl_link_latency;     
 
@@ -139,7 +142,7 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
    }
 
    // EP -- EP Memory Controller
-   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+   if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_WRITE(hit_mem_region)) {
       IntPtr dram_address = 0;
 #ifdef RECORD_CXL_TRACE
       SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, WRITE, dram_address);
@@ -158,13 +161,14 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
 
    ++m_writes;
    #ifdef ENABLE_DRAM_ACCESS_COUNT
-   if ((hit_mem_region & WITH_CXL_MEM) && !(hit_mem_region & WITH_CXL_BNISP)) {
+   if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_WRITE(hit_mem_region)) {
       addToDramAccessCount(address, WRITE);
    }
    // addToDramAccessCount(address, WRITE);
    #endif
    MYLOG("W @ %08lx", address);
 
+   hit_mem_region = DEFAULT;
    return boost::tuple<SubsecondTime, HitWhere::where_t>(dram_access_latency, HitWhere::DRAM);
 }
 
@@ -187,7 +191,7 @@ DramCntlr::printDramAccessCount()
 {
    for (UInt32 k = 0; k < DramCntlrInterface::NUM_ACCESS_TYPES; k++)
    {
-      std::cout << m_dram_access_count[k].size() << " " << ((k == READ)? "READ" : "WRITE") << " accesses" << std::endl;
+      // std::cout << m_dram_access_count[k].size() << " " << ((k == READ)? "READ" : "WRITE") << " accesses" << std::endl;
       for (AccessCountMap::iterator i = m_dram_access_count[k].begin(); i != m_dram_access_count[k].end(); i++)
       {
          if ((*i).second > 100)

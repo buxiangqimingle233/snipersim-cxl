@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../../../include/sim_api.h
+
+/home/wangzhao/snipersim/test/write-sync/test_memrw.cpp
+stdlib.h
+-
+time.h
+-
+cstdio
+-
+sim_api.h
+/home/wangzhao/snipersim/test/write-sync/sim_api.h
+iostream
+-
+

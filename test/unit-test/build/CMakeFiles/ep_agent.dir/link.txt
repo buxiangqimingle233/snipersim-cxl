@@ -1,0 +1,2 @@
+/usr/bin/ar qc libep_agent.a  CMakeFiles/ep_agent.dir/home/wangzhao/snipersim/common/performance_model/cxtnl_shim/ep_agent.cc.o CMakeFiles/ep_agent.dir/home/wangzhao/snipersim/common/performance_model/cxtnl_shim/murmur.cc.o
+/usr/bin/ranlib libep_agent.a

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <unordered_map>
 
 #if 0
    extern Lock iolock;
@@ -45,7 +46,8 @@ MemoryManager::MemoryManager(Core* core,
    m_tag_directory_present(false),
    m_dram_cntlr_present(false),
    m_enabled(false),
-   m_region(DEFAULT)
+   m_region(DEFAULT),
+   m_cached_addr_region_map(std::unordered_map<IntPtr, MEMORY_REGION>())
 {
    // Read Parameters from the Config file
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
@@ -222,8 +224,9 @@ MemoryManager::MemoryManager(Core* core,
       }
    }
 
-   m_tag_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_tag_directories, getCacheBlockSize());
-   m_dram_controller_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize());
+   core_id_t m_total_cores = Sim()->getConfig()->getApplicationCores();
+   m_tag_directory_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_tag_directories, getCacheBlockSize(), m_total_cores);
+   m_dram_controller_home_lookup = new AddressHomeLookup(dram_directory_home_lookup_param, core_list_with_dram_controllers, getCacheBlockSize(), m_total_cores);
 
    // if (m_core->getId() == 0)
    //   printCoreListWithMemoryControllers(core_list_with_dram_controllers);
@@ -378,10 +381,22 @@ MemoryManager::MemoryManager(Core* core,
 
    // Set up core topology information
    getCore()->getTopologyInfo()->setup(smt_cores, cache_parameters[m_last_level_cache].shared_cores);
+
+   m_cxl_req_hit.resize(2);
+   m_cxl_req_hit[0].resize(MemComponent::NUM_MEM_COMPONENTS, 0);
+   m_cxl_req_hit[1].resize(MemComponent::NUM_MEM_COMPONENTS, 0);
 }
 
+
 MemoryManager::~MemoryManager()
-{
+{  
+   // printf("Core: %d\n", getCore()->getId());
+   for (int i = 0; i < MemComponent::MAX_MEM_COMPONENT; ++i) {
+      if (m_cxl_req_hit[0][i] > 0 || m_cxl_req_hit[1][i] > 0) {
+         // printf("CXL Req Hit %d: READ %d WRITE %d, UNIQUE WRITE %d\n", i, m_cxl_req_hit[0][i], m_cxl_req_hit[1][i], m_cached_addr_region_map.size());
+      }
+   }
+   
    UInt32 i;
 
    getNetwork()->unregisterCallback(SHARED_MEM_1);
@@ -533,7 +548,7 @@ MYLOG("begin");
 
    if (shmem_msg->getDataLength() > 0)
    {
-      assert(shmem_msg->getDataBuf());
+   assert(shmem_msg->getDataBuf());
       delete [] shmem_msg->getDataBuf();
    }
    delete shmem_msg;
@@ -541,22 +556,28 @@ MYLOG("end");
 }
 
 void
-MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num)
+MemoryManager::sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf, UInt32 data_length, HitWhere::where_t where, ShmemPerf *perf, ShmemPerfModel::Thread_t thread_num, PrL1PrL2DramDirectoryMSI::ShmemMsg* org_msg)
 {
 MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, receiver, receiver_mem_component);
 
    int hit_mem_region = DEFAULT;
-   // FIXME: Bugs will happen when the directory core is issuing a cxl-memory read while reflect a common read. 
-   // Because the case of data_length == -1 indicates that the read to cxl memory is reflected by the cache directory from other cache agents.
-   // However, m_region & WITH_CXL_MEM indicates that **this** HA issues a read to cxl memory
-   // However, this bug will only influence on the current memory operation, since the memory model will clean up the cxl flag after every read. 
-   if ((receiver_mem_component == MemComponent::DRAM && ((data_length & PREFIX) != 0))) {
-      hit_mem_region = data_length ^ PREFIX;
-      data_length = 0;
+
+   // DRAM Directory -> DRAM
+   if (sender_mem_component == MemComponent::TAG_DIR && receiver_mem_component == MemComponent::DRAM) {
+      assert(org_msg != NULL);
+      hit_mem_region = org_msg->hit_mem_region; // We just forward
    }
 
-   if (receiver_mem_component == MemComponent::TAG_DIR) {
-      hit_mem_region = m_region;
+   // LLC -> DRAM Directory
+   if (sender_mem_component == MemComponent::LAST_LEVEL_CACHE && receiver_mem_component == MemComponent::TAG_DIR) {
+      // Read Request 
+      if (msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REQ || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REQ) {
+         hit_mem_region = m_region;
+      } else if (msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::WB_REP) {
+         // Write Back / Flush / Invalidation
+         hit_mem_region = getAddressBackedRegion(address);
+         // cleanAddressBackedRegion(address);
+      }
    }
 
    assert((data_buf == NULL) == (data_length == 0));

@@ -9,4 +9,6 @@
 
 void MurmurHash3_x64_128 ( const void * key, int len, uint32_t seed, void * out );
 
+#define SALT_CONSTANT 0x97c29b3a
+
 #endif // _MURMURHASH3_H_

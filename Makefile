@@ -2,7 +2,7 @@ SIM_ROOT ?= $(shell readlink -f "$(CURDIR)")
 
 CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
-CFLAGS = -Wno-narrowing
+CFLAGS = -Wno-narrowing -Wno-reorder
 CPPFLAGS = -Wno-narrowing
 
 STANDALONE=$(SIM_ROOT)/lib/sniper

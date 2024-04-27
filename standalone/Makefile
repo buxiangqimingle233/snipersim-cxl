@@ -10,7 +10,7 @@ CLEAN=$(findstring clean,$(MAKECMDGOALS))
 
 # Add other CXX Flags
 CXXFLAGS += -c \
-            -fPIC -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) #-Werror
+            -fPIC -Wall -Wno-unknown-pragmas $(OPT_CFLAGS) -Wreorder #-Werror
 
 # Use the pin flags for building
 include $(SIM_ROOT)/Makefile.config

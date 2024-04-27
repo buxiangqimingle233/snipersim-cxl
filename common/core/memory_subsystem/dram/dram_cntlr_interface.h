@@ -37,6 +37,7 @@ class DramCntlrInterface
       {
          READ = 0,
          WRITE,
+         CXTNL_RESERVE,
          NUM_ACCESS_TYPES
       } access_t;
 

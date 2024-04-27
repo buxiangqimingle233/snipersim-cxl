@@ -67,6 +67,7 @@ namespace ParametricDramDirectoryMSI
          CachePerfModel* m_cache_perf_models[MemComponent::LAST_LEVEL_CACHE + 1];
 
          int m_region;
+         std::unordered_map<IntPtr, MEMORY_REGION> m_cached_addr_region_map;
 
          // Global map of all caches on all cores (within this process!)
          static CacheCntlrMap m_all_cache_cntlrs;
@@ -74,6 +75,7 @@ namespace ParametricDramDirectoryMSI
          void accessTLB(TLB * tlb, IntPtr address, bool isIfetch, Core::MemModeled modeled);
 
       public:
+         std::vector<std::vector<int>> m_cxl_req_hit;
          MemoryManager(Core* core, Network* network, ShmemPerfModel* shmem_perf_model);
          ~MemoryManager();
 
@@ -85,6 +87,8 @@ namespace ParametricDramDirectoryMSI
          Cache* getL1ICache() { return getCache(MemComponent::L1_ICACHE); }
          Cache* getL1DCache() { return getCache(MemComponent::L1_DCACHE); }
          Cache* getLastLevelCache() { return getCache(MemComponent::LAST_LEVEL_CACHE); }
+         CacheCntlr* getLastLevelCacheCntlr() { return m_cache_cntlrs[MemComponent::component_t(m_last_level_cache)]; }
+
          PrL1PrL2DramDirectoryMSI::DramDirectoryCache* getDramDirectoryCache() { return m_dram_directory_cntlr->getDramDirectoryCache(); }
          PrL1PrL2DramDirectoryMSI::DramCntlr* getDramCntlr() { return m_dram_cntlr; }
          AddressHomeLookup* getTagDirectoryHomeLookup() { return m_tag_directory_home_lookup; }
@@ -103,7 +107,9 @@ namespace ParametricDramDirectoryMSI
 
          void handleMsgFromNetwork(NetPacket& packet);
 
-         void sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, core_id_t receiver, IntPtr address, Byte* data_buf = NULL, UInt32 data_length = 0, HitWhere::where_t where = HitWhere::UNKNOWN, ShmemPerf *perf = NULL, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
+         void sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, \
+            core_id_t receiver, IntPtr address, Byte* data_buf = NULL, UInt32 data_length = 0, HitWhere::where_t where = HitWhere::UNKNOWN, ShmemPerf *perf = NULL, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS, \
+            PrL1PrL2DramDirectoryMSI::ShmemMsg* org_msg = NULL);
 
          void broadcastMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type, MemComponent::component_t sender_mem_component, MemComponent::component_t receiver_mem_component, core_id_t requester, IntPtr address, Byte* data_buf = NULL, UInt32 data_length = 0, ShmemPerf *perf = NULL, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
 
@@ -126,6 +132,24 @@ namespace ParametricDramDirectoryMSI
          void incrElapsedTime(MemComponent::component_t mem_component, CachePerfModel::CacheAccess_t access_type, ShmemPerfModel::Thread_t thread_num = ShmemPerfModel::NUM_CORE_THREADS);
 
          MEMORY_REGION getMemoryRegion() { return m_region; }
+         MEMORY_REGION getAddressBackedRegion(IntPtr address) { 
+            address &= ~0x3F;
+            if (m_cached_addr_region_map.find(address) != m_cached_addr_region_map.end()) {
+               return m_cached_addr_region_map[address];
+            } else {
+               return DEFAULT;
+            }
+         }
+         void setAddressBackedRegion(IntPtr address, MEMORY_REGION region) { 
+            address &= ~0x3F;
+            m_cached_addr_region_map[address] = region; 
+         }
+         void cleanAddressBackedRegion(IntPtr address) { 
+            address &= ~0x3F;
+            if (m_cached_addr_region_map.find(address) != m_cached_addr_region_map.end()) {
+               m_cached_addr_region_map.erase(address);
+            }
+         }
          void setMemoryRegion(MEMORY_REGION where);
    };
 }

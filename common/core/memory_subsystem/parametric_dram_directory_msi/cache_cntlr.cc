@@ -239,6 +239,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "mshr-latency", &stats.mshr_latency);
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
    registerStatsMetric(name, core_id, "cxl-cache-overhead", &stats.cxl_cache_overhead);
+   registerStatsMetric(name, core_id, "cxl-mem-read-cnt", &stats.cxl_mem_read_cnt);
+   registerStatsMetric(name, core_id, "cxl-mem-write-cnt", &stats.cxl_mem_write_cnt);
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
       registerStatsMetric(name, core_id, String("loads-")+CStateString(state), &stats.loads_state[state]);
       registerStatsMetric(name, core_id, String("stores-")+CStateString(state), &stats.stores_state[state]);
@@ -340,7 +342,6 @@ CacheCntlr::processMemOpFromCore(
       bool count)
 {
    HitWhere::where_t hit_where = HitWhere::MISS;
-   // MEMORY_REGION memory_region = m_memory_manager->getMemoryRegion();
 
    // Protect against concurrent access from sibling SMT threads
    ScopedLock sl_smt(m_master->m_smt_lock);
@@ -615,6 +616,28 @@ MYLOG("access done");
       Sim()->getConfig()->getCacheEfficiencyCallbacks().call_notify_access(cache_block_info->getOwner(), mem_op_type, hit_where);
 
    MYLOG("returning %s, latency %lu ns", HitWhereString(hit_where), total_latency.getNS());
+
+   // DEBUG: check where cxl reads and writes locate on ( from core )
+   MEMORY_REGION m_region = getMemoryManager()->getMemoryRegion();
+   if (BELONGS_TO_CXL(m_region)) {
+      if (IS_TRACKED_READ(m_region) && ((mem_op_type == Core::mem_op_t::READ) || (mem_op_type == Core::mem_op_t::READ_EX))) {
+         stats.cxl_mem_read_cnt++;
+      } 
+      if (IS_TRACKED_WRITE(m_region) && (mem_op_type == Core::mem_op_t::WRITE)) {
+         stats.cxl_mem_write_cnt++;
+      }
+   }
+
+   if (BELONGS_TO_TYPE3(m_region)) {
+      if (IS_TRACKED_READ(m_region) && ((mem_op_type == Core::mem_op_t::READ) || (mem_op_type == Core::mem_op_t::READ_EX))) {
+         getMemoryManager()->m_cxl_req_hit[0][hit_where]++;
+         // getMemoryManager()->setAddressBackedRegion(ca_address, m_region);
+      } else if (IS_TRACKED_WRITE(m_region) && (mem_op_type == Core::mem_op_t::WRITE)) {
+         getMemoryManager()->m_cxl_req_hit[1][hit_where]++;
+         getMemoryManager()->setAddressBackedRegion(ca_address, m_region);
+      }
+   }
+
    return hit_where;
 }
 
@@ -624,7 +647,7 @@ CacheCntlr::updateHits(Core::mem_op_t mem_op_type, UInt64 hits)
 {
    ScopedLock sl(getLock());
 
-   while(hits > 0)
+   while(hits > 0) 
    {
       getCache()->updateCounters(true);
       updateCounters(mem_op_type, 0, true, mem_op_type == Core::READ ? CacheState::SHARED : CacheState::MODIFIED, Prefetch::NONE);
@@ -800,6 +823,7 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
    bool first_hit = cache_hit;
    HitWhere::where_t hit_where = HitWhere::MISS;
    SharedCacheBlockInfo* cache_block_info = getCacheBlockInfo(address);
+   MEMORY_REGION region = getMemoryManager()->getMemoryRegion();
 
    if (!cache_hit && m_perfect)
    {
@@ -946,11 +970,11 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             if (*it != requester)
                latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
 
-         // We assume parallel snooping, thus only incurs one cxl.cache roundtrip
-         if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
-            latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-            atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
-         }
+         // // We assume parallel snooping, thus only incurs one cxl.cache roundtrip
+         // if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
+         //    latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+         //    atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+         // }
 
          getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          atomic_add_subsecondtime(stats.snoop_latency, latency);
@@ -986,10 +1010,10 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                if (*it != requester)
                   latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
 
-            if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
-               latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-               atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
-            }
+            // if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
+            //    latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            //    atomic_add_subsecondtime(stats.cxl_cache_overhead, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
+            // }
 
             getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
             atomic_add_subsecondtime(stats.snoop_latency, latency);
@@ -1002,6 +1026,10 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             MYLOG("Silent upgrade from E -> M for address %lx", address);
             cache_block_info->setCState(CacheState::MODIFIED);
          }
+         // We intiate a directory access for ANY DRAM access, despite the requester node may have the dram controller.
+         // This address the bug of not updating the directory state when the requester node has the dram controller. 
+         // CXL Cache Rountrip is addred at the DRAM Directory
+         // initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
          else if (m_master->m_dram_cntlr)
          {
             // Direct DRAM access
@@ -1026,9 +1054,9 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                // FIXME: LLC do not have next_level_cache to resolve coherence between different shards, we consequently assume a CXL dirctory implementation 
                // so that each LLC miss will issue a directory tag lookup, which takes cxl_cache_roundtrip ns.
                // This may enlarge the effect of cxl_cache_overhead, to precisely estimate it, we need a dummy L4 cache to resolve LLC's coherency 
-               if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
+               if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
                   latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-                  atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+                  atomic_add_subsecondtime(stats.cxl_cache_overhead, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
                   atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
                }
 
@@ -1047,14 +1075,13 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
             initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
 
             // Similar problem 
-            SubsecondTime latency = SubsecondTime::Zero();
-            if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() & WITH_CXL_BNISP)) {
-               latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-               atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
-               atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
-               // printf("HIT 1055\n");
-            }
-            getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
+            // SubsecondTime latency = SubsecondTime::Zero();
+            // if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
+            //    latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            //    atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
+            //    atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
+            // }
+            // getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          }
       }
    }
@@ -1161,17 +1188,23 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
    SubsecondTime dram_latency;
    HitWhere::where_t hit_where;
 
-   if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() != DEFAULT)) {
-      m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getMemoryRegion();
-   }
+
    switch (mem_op_type)
    {
       case Core::READ:
+         if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() != DEFAULT)) {
+            m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getMemoryRegion();
+         }
          boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->getDataFromDram(address, m_core_id_master, data_buf, t_issue, m_shmem_perf);
          break;
 
       case Core::READ_EX:
-      case Core::WRITE:
+      case Core::WRITE: 
+         if (!m_next_cache_cntlr && (getMemoryManager()->getAddressBackedRegion(address) != DEFAULT)) {
+            m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getAddressBackedRegion(address);
+            // getMemoryManager()->cleanAddressBackedRegion(address);    // Clean the CXL-backed cachelines
+            // TODO: You need to clean it to avoid expansion of the map
+         }
          boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->putDataToDram(address, m_core_id_master, data_buf, t_issue);
          break;
 
@@ -1254,7 +1287,7 @@ CacheCntlr::processExReqToDirectory(IntPtr address)
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address) /* receiver */,
+         getHome(address, m_core_id_master) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, m_shmem_perf, ShmemPerfModel::_USER_THREAD);
@@ -1273,7 +1306,7 @@ CacheCntlr::processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf, ShmemP
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address) /* receiver */,
+         getHome(address, m_core_id_master) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, perf, thread_num);
@@ -1286,7 +1319,7 @@ MYLOG("SH REQ @ %lx", address);
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address) /* receiver */,
+         getHome(address, m_core_id_master) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, m_shmem_perf, ShmemPerfModel::_USER_THREAD);
@@ -1560,7 +1593,7 @@ MYLOG("evicting @%lx", evict_address);
       else
       {
          /* Send dirty block to directory */
-         UInt32 home_node_id = getHome(evict_address);
+         UInt32 home_node_id = getHome(evict_address, m_core_id);
          if (evict_block_info.getCState() == CacheState::MODIFIED)
          {
             // Send back the data also

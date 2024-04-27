@@ -1,3 +1,4 @@
+/*
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -100,3 +101,4 @@ NumaAddressBalancer::NUMA_NODE LocalFirstBalancer::locate_where(UInt64 va, int c
     }
 
 }
+*/

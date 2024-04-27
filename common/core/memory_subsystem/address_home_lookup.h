@@ -23,10 +23,15 @@ class AddressHomeLookup
    public:
       AddressHomeLookup(UInt32 ahl_param,
             std::vector<core_id_t>& core_list,
-            UInt32 cache_block_size);
+            UInt32 cache_block_size,
+            core_id_t m_core_num);
       ~AddressHomeLookup();
       // Return home node for a given address
-      core_id_t getHome(IntPtr address) const;
+
+      // core_id_t getHome(IntPtr address) const;
+      // In CXL, each home node manages one coherence domain. We determine which domain the core belongs to by 
+      // looking at the requester core id. The CXL EP Agent locates at the DRAM controller of the home node. 
+      core_id_t getHome(IntPtr address, core_id_t requester) const;  
       // Within home node, return unique, incrementing block number
       IntPtr getLinearBlock(IntPtr address) const;
       // Within home node, return unique, incrementing address to be used in cache set selection
@@ -38,6 +43,7 @@ class AddressHomeLookup
       std::vector<core_id_t> m_core_list;
       UInt32 m_total_modules;
       UInt32 m_cache_block_size;
+      core_id_t m_core_num;
 };
 
 #endif /* __ADDRESS_HOME_LOOKUP_H__ */

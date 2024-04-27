@@ -1,0 +1,3 @@
+/home/wangzhao/snipersim/test/write-sync/build/CMakeFiles/rebuild_cache.dir
+/home/wangzhao/snipersim/test/write-sync/build/CMakeFiles/edit_cache.dir
+/home/wangzhao/snipersim/test/write-sync/build/CMakeFiles/test1.dir

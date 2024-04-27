@@ -60,10 +60,11 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
 
       case PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ:
       {
+         // set the memory region
+         hit_mem_region = shmem_msg->hit_mem_region;
          putDataToDram(shmem_msg->getAddress(), shmem_msg->getRequester(), shmem_msg->getDataBuf(), msg_time);
 
          // DRAM latency is ignored on write
-
          break;
       }
 

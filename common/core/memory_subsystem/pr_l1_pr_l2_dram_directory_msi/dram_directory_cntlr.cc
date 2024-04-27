@@ -72,8 +72,11 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
          registerStatsMetric("directory", core_id, String("evict-")+DStateString(state), &evict[state]);
       }
    }
+   cxl_cache_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_cache_roundtrip");
+   
    registerStatsMetric("directory", core_id, "forward", &forward);
    registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
+   registerStatsMetric("directory", core_id, "cxl-cache-overhead", &cxl_cache_overhead);
 
    String protocol = Sim()->getCfg()->getString("caching_protocol/variant");
    if (protocol == "msi")
@@ -414,6 +417,20 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
 
    updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
 
+   switch (curr_dstate) {
+      case DirectoryState::EXCLUSIVE:
+      case DirectoryState::MODIFIED:
+      case DirectoryState::SHARED:
+      {
+         if (BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
+            // increase time
+            SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            atomic_add_subsecondtime(cxl_cache_overhead, l);
+            getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+         }
+      }
+   }
+
    switch (curr_dstate)
    {
       case DirectoryState::EXCLUSIVE: // Cache may have done a silent upgrade to MODIFIED, so send a FLUSH (dirty data) rather than an INV (data clean)
@@ -505,6 +522,20 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    DirectoryState::dstate_t curr_dstate = directory_block_info->getDState();
 
    updateShmemPerf(shmem_req, ShmemPerf::TD_ACCESS);
+
+   switch (curr_dstate) {
+      case DirectoryState::EXCLUSIVE:
+      case DirectoryState::MODIFIED:
+      case DirectoryState::SHARED:
+      {
+         if (BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
+            // increase time
+            SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            atomic_add_subsecondtime(cxl_cache_overhead, l);
+            getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+         }
+      }
+   }
 
    switch (curr_dstate)
    {
@@ -700,20 +731,21 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       // Remember that this request is waiting for data, and should not be woken up by voluntary invalidates
       shmem_req->setWaitForData(true);
 
-      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address, receiver);
 
       MYLOG("Sending request to DRAM for the data");
       // Hacking the sendMsg function, using an ultra-large data length to indicate the reads on cxl memory
-      int hacked_length = orig_shmem_msg->hit_mem_region == DEFAULT ? 0 : (PREFIX ^ orig_shmem_msg->hit_mem_region);
+      // int hacked_length = orig_shmem_msg->hit_mem_region == DEFAULT ? 0 : (PREFIX ^ orig_shmem_msg->hit_mem_region);
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_READ_REQ,
             MemComponent::TAG_DIR, MemComponent::DRAM,
             receiver /* requester */,
             dram_node /* receiver */,
             address,
-            NULL, hacked_length,
+            NULL, 0,
             HitWhere::UNKNOWN,
             orig_shmem_msg->getPerf(),
-            ShmemPerfModel::_SIM_THREAD);
+            ShmemPerfModel::_SIM_THREAD,
+            orig_shmem_msg);
    }
    MYLOG("End @ %lx", address);
 }
@@ -727,7 +759,6 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
    // Data received from DRAM
 
    //   Which node to reply to?
-
    assert(m_dram_directory_req_queue_list->size(address) >= 1);
    ShmemReq* shmem_req = m_dram_directory_req_queue_list->front(address);
    updateShmemPerf(shmem_req);
@@ -788,7 +819,7 @@ DramDirectoryCntlr::processDRAMReply(core_id_t sender, ShmemMsg* shmem_msg)
          ShmemPerfModel::_SIM_THREAD);
 
    // Keep a copy in NUCA
-   sendDataToNUCA(address, shmem_req->getShmemMsg()->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), false);
+   sendDataToNUCA(address, shmem_req->getShmemMsg()->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), false, shmem_req->getShmemMsg());
 
    // Process Next Request
    processNextReqFromL2Cache(address);
@@ -934,6 +965,20 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
    }
 
    updateShmemPerf(shmem_msg, ShmemPerf::TD_ACCESS);
+
+   switch (curr_dstate) {
+      case DirectoryState::EXCLUSIVE:
+      case DirectoryState::MODIFIED:
+      case DirectoryState::SHARED:
+      {
+         if (BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
+            // increase time
+            SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
+            atomic_add_subsecondtime(cxl_cache_overhead, l);
+            getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+         }
+      }
+   }
 
    switch (curr_dstate)
    {
@@ -1117,7 +1162,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       else if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::SH_REQ)
       {
          // Write Data to Dram
-         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now, shmem_msg);
          processShReqFromL2Cache(shmem_req, shmem_msg->getDataBuf());
       }
       else if (shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::UPGRADE_REQ)
@@ -1143,7 +1188,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
       else // shmem_req->getShmemMsg()->getMsgType() == ShmemMsg::NULLIFY_REQ
       {
          // Write Data To Dram
-         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now, shmem_msg);
          processNullifyReq(shmem_req);
       }
    }
@@ -1151,7 +1196,7 @@ DramDirectoryCntlr::processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem
    {
       // This was just an eviction
       // Write Data to Dram
-      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now);
+      sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), now, shmem_msg);
    }
 
    MYLOG("End @ %lx", address);
@@ -1200,7 +1245,7 @@ DramDirectoryCntlr::processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_ms
 }
 
 void
-DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, bool count)
+DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, bool count, ShmemMsg* shmem_msg)
 {
    if (m_nuca_cache)
    {
@@ -1218,7 +1263,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
       if (eviction)
       {
          // Write data to Dram
-         core_id_t dram_node = m_dram_controller_home_lookup->getHome(evict_address);
+         core_id_t dram_node = m_dram_controller_home_lookup->getHome(evict_address, requester);
 
          getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
                MemComponent::TAG_DIR, MemComponent::DRAM,
@@ -1228,14 +1273,15 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
                evict_buf, getCacheBlockSize(),
                HitWhere::UNKNOWN,
                &m_dummy_shmem_perf,
-               ShmemPerfModel::_SIM_THREAD);
+               ShmemPerfModel::_SIM_THREAD,
+               shmem_msg);
       }
    }
    MYLOG("End");
 }
 
 void
-DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now)
+DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* org_msg )
 {
    MYLOG("Start @ %lx", address);
 
@@ -1243,12 +1289,12 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
    {
       // If we have a NUCA cache: write it there, it will be written to DRAM on eviction
 
-      sendDataToNUCA(address, requester, data_buf, now, true);
+      sendDataToNUCA(address, requester, data_buf, now, true, org_msg);
    }
    else
    {
       // Write data to Dram
-      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address);
+      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address, requester);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
             MemComponent::TAG_DIR, MemComponent::DRAM,
@@ -1258,7 +1304,8 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
             data_buf, getCacheBlockSize(),
             HitWhere::UNKNOWN,
             &m_dummy_shmem_perf,
-            ShmemPerfModel::_SIM_THREAD);
+            ShmemPerfModel::_SIM_THREAD,
+            org_msg);
 
       // DRAM latency is ignored on write
    }
