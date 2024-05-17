@@ -175,7 +175,7 @@ def generate_mem_count(jobid = None, resultsdir = None, partial = None, output =
       return 0
 
   def getsum(name):
-    return sum(list(filter(lambda x: x > 0 and x != float('inf'), results[name])))
+    return sum(list(filter(lambda x: x > 0 and x != float('inf'), results.get(name, 0))))
 
   lines = {}
   names = ["L3.loads", "L3.stores", "L3.load-misses", "L3.store-misses", "L1-D.loads-where-dram", \

@@ -353,7 +353,7 @@ namespace ParametricDramDirectoryMSI
 
          // Dram Directory Home Lookup
          // core_id_t getHome(IntPtr address) { return m_tag_directory_home_lookup->getHome(address); }
-         core_id_t getHome(IntPtr address, core_id_t requester) { return m_tag_directory_home_lookup->getHome(address, requester); }
+         core_id_t getHomeCXL(IntPtr address, core_id_t requester, int hit_mem_region) { return m_tag_directory_home_lookup->getHomeCXL(address, requester, hit_mem_region); }
 
          CacheCntlr* lastLevelCache(void);
 

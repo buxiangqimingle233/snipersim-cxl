@@ -49,23 +49,23 @@ EPAgent::EPAgent(): m_cnt_raw(0), m_cnt_hash_conflict(0),
     UInt32 cache_bf_size, cache_bf_nfunc;
     UInt32 view_address_table_size, view_address_table_nway;
 
-#ifdef UNIT_TEST
-    String view_bf_file = "view_bf_file.bin";
-    String cache_bf_file = "cache_bf_file.bin";
-#else
-    String view_bf_file = Sim()->getConfig()->formatOutputFileName("view_bf_file.bin");
-    String cache_bf_file = Sim()->getConfig()->formatOutputFileName("cache_bf_file.bin");
-#endif
+// #ifdef UNIT_TEST
+//     String view_bf_file = "view_bf_file.bin";
+//     String cache_bf_file = "cache_bf_file.bin";
+// #else
+//     String view_bf_file = Sim()->getConfig()->formatOutputFileName("view_bf_file.bin");
+//     String cache_bf_file = Sim()->getConfig()->formatOutputFileName("cache_bf_file.bin");
+// #endif
 
-    FILE *fp;
-    if ((fp = fopen(view_bf_file.c_str(), "r"))) {
-        fclose(fp);
-        remove(view_bf_file.c_str());
-    }
-    if ((fp = fopen(cache_bf_file.c_str(), "r"))) {
-        fclose(fp);
-        remove(cache_bf_file.c_str());
-    }
+//     FILE *fp;
+//     if ((fp = fopen(view_bf_file.c_str(), "r"))) {
+//         fclose(fp);
+//         remove(view_bf_file.c_str());
+//     }
+//     if ((fp = fopen(cache_bf_file.c_str(), "r"))) {
+//         fclose(fp);
+//         remove(cache_bf_file.c_str());
+//     }
 
 #ifdef UNIT_TEST
     view_bf_size = 1 << 14;
@@ -90,7 +90,7 @@ EPAgent::EPAgent(): m_cnt_raw(0), m_cnt_hash_conflict(0),
 #endif
 
     view_bf = new BloomFilter(view_bf_size, view_bf_nfunc);
-    cache_bf = new BloomFilter(cache_bf_size, cache_bf_nfunc);
+    view_back_bf = new BloomFilter(cache_bf_size, cache_bf_nfunc);
     
     // TODO: nway should be passed into it
     view_address_table = new CuckooHashMap<UInt64, UInt64>(view_address_table_size, 32);
@@ -109,8 +109,8 @@ SubsecondTime EPAgent::InvalidLocalCopy(const WQE& wqe) {
     for (IntPtr addr = base_addr; addr < wqe.size + wqe.addr; addr += cacheline_size) {
         latency += SubsecondTime::NSfromFloat(counting_bloom_query_latency);
         // Delete the address from host caches
-        if (cache_bf->counting_bloom_check((const char*)&addr, sizeof(addr))) {
-            cache_bf->counting_bloom_remove((const char*)&addr, sizeof(addr));
+        if (view_back_bf->counting_bloom_check((const char*)&addr, sizeof(addr))) {
+            view_back_bf->counting_bloom_remove((const char*)&addr, sizeof(addr));
             latency += SubsecondTime::NSfromFloat(std::max(cxl_mem_roundtrip, counting_bloom_query_latency));   // Bnisp from dev to host
         }
         // Delete the address from view  
@@ -123,6 +123,7 @@ SubsecondTime EPAgent::InvalidLocalCopy(const WQE& wqe) {
     
     return latency;
 }
+
 
 void EPAgent::AppendPendingRemoteInvReq(WQE wqe) {
     pthread_mutex_lock(inv_que_latch);
@@ -175,7 +176,7 @@ SubsecondTime EPAgent::Translate(IntPtr physical_address, core_id_t requester, i
     if (access_type == DramCntlrInterface::WRITE) {
         // View Bloom Filter Insert
         view_bf->counting_bloom_add(bf_query_key, sizeof(cacheline_address));
-        cache_bf->counting_bloom_remove((const char*)(&page_address), sizeof(cacheline_address));
+        view_back_bf->counting_bloom_remove((const char*)(&page_address), sizeof(cacheline_address));
 
         // Cuckoo Hash Map Insert
         int n_tries = view_address_table->insert(cacheline_address, cacheline_address);
@@ -187,7 +188,7 @@ SubsecondTime EPAgent::Translate(IntPtr physical_address, core_id_t requester, i
         m_handled_write++;
         m_viewtable_insert++;
     } else if (access_type == DramCntlrInterface::READ) {
-        cache_bf->counting_bloom_add((const char*)(&page_address), sizeof(cacheline_address));
+        view_back_bf->counting_bloom_add((const char*)(&page_address), sizeof(cacheline_address));
 
         latency += SubsecondTime::NSfromFloat(counting_bloom_query_latency);
 
@@ -262,7 +263,7 @@ EPAgent::~EPAgent() {
     std::cout << std::endl;
     
     std::cout << "Cache Bloom Filter Status: " << std::endl;
-    cache_bf->print_states();
+    view_back_bf->print_states();
 
     // Benchmark 
     std::cout << "Benchmark Status: " << std::endl;

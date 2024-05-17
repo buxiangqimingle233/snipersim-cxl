@@ -38,7 +38,7 @@ private:
 
     // Fast Path
     BloomFilter* view_bf;
-    BloomFilter* cache_bf;
+    BloomFilter* view_back_bf;
     CuckooHashMap<UInt64, UInt64>* view_address_table;
 
     // Commit Path

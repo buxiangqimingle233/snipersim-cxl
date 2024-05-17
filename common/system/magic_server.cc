@@ -232,7 +232,7 @@ UInt64 MagicServer::changeMemoryModelMode(UInt64 core_id, UInt64 where) {
 UInt64 MagicServer::enqueueWriteToSync(UInt64 thread_id, UInt64 core_id, UInt64 address, UInt64 size) {
    IntPtr pa = Sim()->getThreadManager()->getThreadFromID(thread_id)->va2pa(address);
    ParametricDramDirectoryMSI::MemoryManager* manager = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager()));
-   core_id_t homeid = manager->getTagDirectoryHomeLookup()->getHome(pa, core_id);
+   core_id_t homeid = manager->getTagDirectoryHomeLookup()->getHomeCXL(pa, core_id, manager->getMemoryRegion());
    CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(homeid)->getMemoryManager()))->getDramCntlr()->getEPAgent();
    ep->AppendWorkQueueElement({pa, size, (core_id_t)core_id});
    ep->dequeueWorkQueue();

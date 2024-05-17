@@ -31,7 +31,8 @@ class AddressHomeLookup
       // core_id_t getHome(IntPtr address) const;
       // In CXL, each home node manages one coherence domain. We determine which domain the core belongs to by 
       // looking at the requester core id. The CXL EP Agent locates at the DRAM controller of the home node. 
-      core_id_t getHome(IntPtr address, core_id_t requester) const;  
+      core_id_t getHome(IntPtr address) const;  
+      core_id_t getHomeCXL(IntPtr address, core_id_t requester, int hit_mem_region) const;
       // Within home node, return unique, incrementing block number
       IntPtr getLinearBlock(IntPtr address) const;
       // Within home node, return unique, incrementing address to be used in cache set selection

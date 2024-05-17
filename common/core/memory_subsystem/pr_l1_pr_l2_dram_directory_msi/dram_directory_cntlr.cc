@@ -731,7 +731,7 @@ DramDirectoryCntlr::retrieveDataAndSendToL2Cache(ShmemMsg::msg_t reply_msg_type,
       // Remember that this request is waiting for data, and should not be woken up by voluntary invalidates
       shmem_req->setWaitForData(true);
 
-      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address, receiver);
+      core_id_t dram_node = m_dram_controller_home_lookup->getHomeCXL(address, receiver, orig_shmem_msg->hit_mem_region);
 
       MYLOG("Sending request to DRAM for the data");
       // Hacking the sendMsg function, using an ultra-large data length to indicate the reads on cxl memory
@@ -1263,7 +1263,7 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
       if (eviction)
       {
          // Write data to Dram
-         core_id_t dram_node = m_dram_controller_home_lookup->getHome(evict_address, requester);
+         core_id_t dram_node = m_dram_controller_home_lookup->getHomeCXL(evict_address, requester, shmem_msg->hit_mem_region);
 
          getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
                MemComponent::TAG_DIR, MemComponent::DRAM,
@@ -1294,7 +1294,7 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
    else
    {
       // Write data to Dram
-      core_id_t dram_node = m_dram_controller_home_lookup->getHome(address, requester);
+      core_id_t dram_node = m_dram_controller_home_lookup->getHomeCXL(address, requester, org_msg->hit_mem_region);
 
       getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
             MemComponent::TAG_DIR, MemComponent::DRAM,

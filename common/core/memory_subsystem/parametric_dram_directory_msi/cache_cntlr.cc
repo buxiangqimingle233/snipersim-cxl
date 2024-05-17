@@ -609,7 +609,7 @@ MYLOG("access done");
    // Call Prefetch on next-level caches (but not for atomic instructions as that causes a locking mess)
    if (lock_signal != Core::LOCK && modeled)
    {
-      Prefetch(t_start);
+      // Prefetch(t_start);
    }
 
    if (Sim()->getConfig()->getCacheEfficiencyCallbacks().notify_access_func)
@@ -1283,11 +1283,11 @@ CacheCntlr::processExReqToDirectory(IntPtr address)
 
    LOG_ASSERT_ERROR (cstate != CacheState::SHARED, "ExReq for a Cacheblock in S, should be a UpgradeReq");
    assert((cstate == CacheState::INVALID));
-
+   int region = getMemoryManager()->getMemoryRegion();
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::EX_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address, m_core_id_master) /* receiver */,
+         getHomeCXL(address, m_core_id_master, region) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, m_shmem_perf, ShmemPerfModel::_USER_THREAD);
@@ -1302,11 +1302,11 @@ CacheCntlr::processUpgradeReqToDirectory(IntPtr address, ShmemPerf *perf, ShmemP
    CacheState::cstate_t cstate = getCacheState(address);
    assert(cstate == CacheState::SHARED);
    setCacheState(address, CacheState::SHARED_UPGRADING);
-
+   int region = getMemoryManager()->getMemoryRegion();
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::UPGRADE_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address, m_core_id_master) /* receiver */,
+         getHomeCXL(address, m_core_id_master, region) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, perf, thread_num);
@@ -1316,10 +1316,11 @@ void
 CacheCntlr::processShReqToDirectory(IntPtr address)
 {
 MYLOG("SH REQ @ %lx", address);
+   int region = getMemoryManager()->getMemoryRegion();
    getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::SH_REQ,
          MemComponent::LAST_LEVEL_CACHE, MemComponent::TAG_DIR,
          m_core_id_master /* requester */,
-         getHome(address, m_core_id_master) /* receiver */,
+         getHomeCXL(address, m_core_id_master, region) /* receiver */,
          address,
          NULL, 0,
          HitWhere::UNKNOWN, m_shmem_perf, ShmemPerfModel::_USER_THREAD);
@@ -1468,7 +1469,7 @@ MYLOG("insertCacheBlock l%d @ %lx as %c (now %c)", m_mem_component, address, CSt
    SharedCacheBlockInfo evict_block_info;
    Byte evict_buf[getCacheBlockSize()];
 
-   LOG_ASSERT_ERROR(getCacheState(address) == CacheState::INVALID, "we already have this line, can't add it again");
+   // LOG_ASSERT_ERROR(getCacheState(address) == CacheState::INVALID, "we already have this line, can't add it again");
 
    m_master->m_cache->insertSingleLine(address, data_buf,
          &eviction, &evict_address, &evict_block_info, evict_buf,
@@ -1593,7 +1594,8 @@ MYLOG("evicting @%lx", evict_address);
       else
       {
          /* Send dirty block to directory */
-         UInt32 home_node_id = getHome(evict_address, m_core_id);
+         int region = getMemoryManager()->getMemoryRegion();
+         UInt32 home_node_id = getHomeCXL(evict_address, m_core_id, region);
          if (evict_block_info.getCState() == CacheState::MODIFIED)
          {
             // Send back the data also
