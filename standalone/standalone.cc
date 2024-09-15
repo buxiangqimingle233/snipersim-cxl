@@ -7,12 +7,13 @@
 #include "exceptions.h"
 #include "sim_api.h"
 
-#define DEBUG 1
+// #define DEBUG 1
+// #define TRACK_BUS_THROUGHPUT 1
 
 int main(int argc, char* argv[])
 {
 
-   #if DEBUG
+   #ifdef DEBUG
       std::cout<<"Please attach debugger to process: "<< getpid() <<std::endl;
       std::cin.get();
    #endif
@@ -61,7 +62,7 @@ int main(int argc, char* argv[])
    {
      Sim()->getTraceManager()->cleanup();
      Sim()->getTraceManager()->setupTraceFiles(i);
-     Sim()->getTraceManager()->init();
+     Sim()->getTraceManager()->init(); 
      Sim()->getTraceManager()->run();
    }
 

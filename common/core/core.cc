@@ -95,7 +95,7 @@ Core::Core(SInt32 id)
    m_clock_skew_minimization_client = ClockSkewMinimizationClient::create(this);
 
    m_shmem_perf_model = new ShmemPerfModel();
-
+ 
    LOG_PRINT("instantiated memory manager model");
    m_memory_manager = MemoryManagerBase::createMMU(
          Sim()->getCfg()->getString("caching_protocol/type"),

@@ -36,7 +36,8 @@ CoreManager::CoreManager()
    std::vector<core_id_t> core_list_with_dram_controllers = (m_cores[0])->getMemoryManager()->getCoreListWithMemoryControllers();
 
    for (auto& c: core_list_with_dram_controllers) {
-      CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(m_cores[c]->getMemoryManager()))->getDramCntlr()->getEPAgent();
+      // CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(m_cores[c]->getMemoryManager()))->getDramCntlr()->getEPAgent();
+      CxTnLMemShim::EPAgent* ep = new CxTnLMemShim::EPAgent();
       ep->setCoreID(c);
       eps.push_back(ep);
    }
@@ -49,15 +50,26 @@ CoreManager::CoreManager()
       }
    }
 
+   for (auto& c: core_list_with_dram_controllers) {
+      ((ParametricDramDirectoryMSI::MemoryManager*)(m_cores[c]->getMemoryManager()))->getDramCntlr()->setEPAgents(eps);
+   }
+
    // Link all EP-Agents
    LOG_PRINT("Finished CoreManager Constructor.");
 }
 
 CoreManager::~CoreManager()
 {
-   for (std::vector<Core *>::iterator i = m_cores.begin(); i != m_cores.end(); i++)
-      delete *i;
+   std::vector<core_id_t> core_list_with_dram_controllers = (m_cores[0])->getMemoryManager()->getCoreListWithMemoryControllers();
+   std::vector<CxTnLMemShim::EPAgent*>* eps = ((ParametricDramDirectoryMSI::MemoryManager*)(m_cores[core_list_with_dram_controllers[0]]->getMemoryManager()))->getDramCntlr()->getAllEPAgents();
 
+   for (auto& ep: *eps) {
+      delete ep;
+   }
+   
+   for (std::vector<Core *>::iterator i = m_cores.begin(); i != m_cores.end(); i++) {
+      delete *i;
+   }
    delete m_core_tls;
    delete m_thread_type_tls;
 }

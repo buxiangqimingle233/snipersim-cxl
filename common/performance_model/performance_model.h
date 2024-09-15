@@ -82,13 +82,13 @@ public:
       else
          disableDetailedModel();
    }
+   void incrementElapsedTime(SubsecondTime time) { m_elapsed_time.addLatency(time); }
 
 protected:
    friend class SpawnInstruction;
    friend class FastforwardPerformanceModel;
 
    void setElapsedTime(SubsecondTime time);
-   void incrementElapsedTime(SubsecondTime time) { m_elapsed_time.addLatency(time); }
    void incrementIdleElapsedTime(SubsecondTime time);
 
    #ifdef ENABLE_PERF_MODEL_OWN_THREAD

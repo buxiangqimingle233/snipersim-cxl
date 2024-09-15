@@ -62,7 +62,8 @@ def output_cpistack_table(results, metric = 'cpi'):
     prefixes = ['', 'm', 'µ', 'n']
     scaleidx = 0
     totaltime = sum(data[0].values())
-    while totaltime < 100. and scaleidx < len(prefixes)-1:
+    # while totaltime < 100. and scaleidx < len(prefixes)-1:
+    while scaleidx < len(prefixes)-1:
       scaleidx += 1
       totaltime *= 1000
     title = 'Time (%ss)' % prefixes[scaleidx]

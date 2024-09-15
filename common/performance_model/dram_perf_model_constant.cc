@@ -13,6 +13,12 @@ DramPerfModelConstant::DramPerfModelConstant(core_id_t core_id,
    m_total_queueing_delay(SubsecondTime::Zero()),
    m_total_access_latency(SubsecondTime::Zero())
 {
+   ComponentBandwidth logic_bandwidth = 8 * Sim()->getCfg()->getFloat("perf_model/dram/total_bandwidth") / Sim()->getCfg()->getInt("perf_model/dram/num_controllers");
+   if (logic_bandwidth < m_dram_bandwidth)
+   {
+      LOG_PRINT_WARNING("DRAM bandwidth per controller is higher than total DRAM bandwidth, reducing per-controller bandwidth");
+      m_dram_bandwidth = logic_bandwidth;
+   }
    m_dram_access_cost = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/latency"))); // Operate in fs for higher precision before converting to uint64_t/SubsecondTime
 
    if (Sim()->getCfg()->getBool("perf_model/dram/queue_model/enabled"))

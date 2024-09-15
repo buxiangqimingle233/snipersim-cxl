@@ -231,11 +231,19 @@ UInt64 MagicServer::changeMemoryModelMode(UInt64 core_id, UInt64 where) {
 
 UInt64 MagicServer::enqueueWriteToSync(UInt64 thread_id, UInt64 core_id, UInt64 address, UInt64 size) {
    IntPtr pa = Sim()->getThreadManager()->getThreadFromID(thread_id)->va2pa(address);
+   
    ParametricDramDirectoryMSI::MemoryManager* manager = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(core_id)->getMemoryManager()));
    core_id_t homeid = manager->getTagDirectoryHomeLookup()->getHomeCXL(pa, core_id, manager->getMemoryRegion());
-   CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(homeid)->getMemoryManager()))->getDramCntlr()->getEPAgent();
+   CxTnLMemShim::EPAgent* ep = ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(homeid)->getMemoryManager()))->getDramCntlr()->getEPAgent(core_id);
    ep->AppendWorkQueueElement({pa, size, (core_id_t)core_id});
-   ep->dequeueWorkQueue();
+
+   // TODO: The host synchronizes with the EP on coherence at current design
+   SubsecondTime latency = ep->dequeueWorkQueue();
+   manager->incrElapsedTime(latency);
+
+   // Track
+   SubsecondTime now = manager->getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_USER_THREAD);
+   ep->recordBusTraffic(now, size);
    return 0;
 }
 

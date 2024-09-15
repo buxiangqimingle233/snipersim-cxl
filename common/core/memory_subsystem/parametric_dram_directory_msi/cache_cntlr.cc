@@ -8,6 +8,7 @@
 #include "hooks_manager.h"
 #include "cache_atd.h"
 #include "shmem_perf.h"
+#include "dram_cntlr_interface.h"
 
 #include <cstring>
 
@@ -153,7 +154,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    m_shmem_perf(new ShmemPerf()),
    m_shmem_perf_global(NULL),
    m_shmem_perf_model(shmem_perf_model),
-   cxl_cache_roundtrip(0)
+   cxl_cache_roundtrip(0),
+   cxl_mem_roundtrip(0)
 {
    m_core_id_master = m_core_id - m_core_id % m_shared_cores;
    Sim()->getStatsManager()->logTopology(name, core_id, m_core_id_master);
@@ -240,6 +242,8 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    registerStatsMetric(name, core_id, "prefetches", &stats.prefetches);
    registerStatsMetric(name, core_id, "cxl-cache-overhead", &stats.cxl_cache_overhead);
    registerStatsMetric(name, core_id, "cxl-mem-read-cnt", &stats.cxl_mem_read_cnt);
+   registerStatsMetric(name, core_id, "cxl-mem-type3-write-cnt", &stats.cxl_mem_type3_write_cnt);
+   registerStatsMetric(name, core_id, "cxl-mem-type3-read-cnt", &stats.cxl_mem_type3_read_cnt);
    registerStatsMetric(name, core_id, "cxl-mem-write-cnt", &stats.cxl_mem_write_cnt);
    for(CacheState::cstate_t state = CacheState::CSTATE_FIRST; state < CacheState::NUM_CSTATE_STATES; state = CacheState::cstate_t(int(state)+1)) {
       registerStatsMetric(name, core_id, String("loads-")+CStateString(state), &stats.loads_state[state]);
@@ -286,7 +290,7 @@ CacheCntlr::CacheCntlr(MemComponent::component_t mem_component,
    }
 
    if (Sim()->getCfg()->hasKey("perf_model/cxl/enabled") && Sim()->getCfg()->getBool("perf_model/cxl/enabled")) {
-      // cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
+      cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
       cxl_cache_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_cache_roundtrip");
    }
 }
@@ -300,6 +304,9 @@ CacheCntlr::~CacheCntlr()
    delete m_shmem_perf;
    if (m_shmem_perf_global)
       delete m_shmem_perf_global;
+   if (!m_next_cache_cntlr) {
+      uncore_hist.print();
+   }
    #ifdef TRACK_LATENCY_BY_HITWHERE
    for(std::unordered_map<HitWhere::where_t, StatHist>::iterator it = lat_by_where.begin(); it != lat_by_where.end(); ++it) {
       printf("%2u-%s: ", m_core_id, HitWhereString(it->first));
@@ -622,13 +629,19 @@ MYLOG("access done");
    if (BELONGS_TO_CXL(m_region)) {
       if (IS_TRACKED_READ(m_region) && ((mem_op_type == Core::mem_op_t::READ) || (mem_op_type == Core::mem_op_t::READ_EX))) {
          stats.cxl_mem_read_cnt++;
+         if (BELONGS_TO_TYPE3(m_region)) {
+            stats.cxl_mem_type3_read_cnt++;
+         }
       } 
       if (IS_TRACKED_WRITE(m_region) && (mem_op_type == Core::mem_op_t::WRITE)) {
          stats.cxl_mem_write_cnt++;
+         if (BELONGS_TO_TYPE3(m_region)) {
+            stats.cxl_mem_type3_write_cnt++;
+         }
       }
    }
 
-   if (BELONGS_TO_TYPE3(m_region)) {
+   if (BELONGS_TO_CXL(m_region)) {
       if (IS_TRACKED_READ(m_region) && ((mem_op_type == Core::mem_op_t::READ) || (mem_op_type == Core::mem_op_t::READ_EX))) {
          getMemoryManager()->m_cxl_req_hit[0][hit_where]++;
          // getMemoryManager()->setAddressBackedRegion(ca_address, m_region);
@@ -637,6 +650,14 @@ MYLOG("access done");
          getMemoryManager()->setAddressBackedRegion(ca_address, m_region);
       }
    }
+
+#ifdef CXLRPC
+   // To simulate CXL-RPC, we just add a fixed latency to the read/write
+   if (BELONGS_TO_CXL(m_region)) {
+      SubsecondTime cxl_latency = SubsecondTime::NS(cxl_mem_roundtrip);
+      getMemoryManager()->incrElapsedTime(cxl_latency, ShmemPerfModel::_USER_THREAD);
+   }
+#endif
 
    return hit_where;
 }
@@ -1010,11 +1031,6 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                if (*it != requester)
                   latency = getMax<SubsecondTime>(latency, (*it)->updateCacheBlock(address, CacheState::INVALID, Transition::UPGRADE, NULL, ShmemPerfModel::_USER_THREAD).first);
 
-            // if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
-            //    latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-            //    atomic_add_subsecondtime(stats.cxl_cache_overhead, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
-            // }
-
             getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
             atomic_add_subsecondtime(stats.snoop_latency, latency);
             #ifdef ENABLE_TRACK_SHARING_PREVCACHES
@@ -1051,15 +1067,6 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
                // Do the DRAM access and increment local time
                boost::tie<HitWhere::where_t, SubsecondTime>(hit_where, latency) = accessDRAM(Core::READ, address, isPrefetch != Prefetch::NONE, data_buf);
 
-               // FIXME: LLC do not have next_level_cache to resolve coherence between different shards, we consequently assume a CXL dirctory implementation 
-               // so that each LLC miss will issue a directory tag lookup, which takes cxl_cache_roundtrip ns.
-               // This may enlarge the effect of cxl_cache_overhead, to precisely estimate it, we need a dummy L4 cache to resolve LLC's coherency 
-               if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
-                  latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-                  atomic_add_subsecondtime(stats.cxl_cache_overhead, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
-                  atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
-               }
-
                getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
 
                // Insert the line. Be sure to use SHARED/MODIFIED as appropriate (upgrades are free anyway), we don't want to have to write back clean lines
@@ -1073,15 +1080,6 @@ CacheCntlr::processShmemReqFromPrevCache(CacheCntlr* requester, Core::mem_op_t m
          else
          {
             initiateDirectoryAccess(mem_op_type, address, isPrefetch != Prefetch::NONE, t_issue);
-
-            // Similar problem 
-            // SubsecondTime latency = SubsecondTime::Zero();
-            // if (!m_next_cache_cntlr && BELONGS_TO_TYPE2(region)) {
-            //    latency += SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
-            //    atomic_add_subsecondtime(stats.cxl_cache_overhead, latency);
-            //    atomic_add_subsecondtime(stats.snoop_latency, SubsecondTime::NSfromFloat(cxl_cache_roundtrip));
-            // }
-            // getMemoryManager()->incrElapsedTime(latency, ShmemPerfModel::_USER_THREAD);
          }
       }
    }
@@ -1188,12 +1186,12 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
    SubsecondTime dram_latency;
    HitWhere::where_t hit_where;
 
-
    switch (mem_op_type)
    {
       case Core::READ:
          if (!m_next_cache_cntlr && (getMemoryManager()->getMemoryRegion() != DEFAULT)) {
             m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getMemoryRegion();
+            getMemoryManager()->setAddressBackedRegion(address, getMemoryManager()->getMemoryRegion());
          }
          boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->getDataFromDram(address, m_core_id_master, data_buf, t_issue, m_shmem_perf);
          break;
@@ -1202,12 +1200,10 @@ CacheCntlr::accessDRAM(Core::mem_op_t mem_op_type, IntPtr address, bool isPrefet
       case Core::WRITE: 
          if (!m_next_cache_cntlr && (getMemoryManager()->getAddressBackedRegion(address) != DEFAULT)) {
             m_master->m_dram_cntlr->hit_mem_region = getMemoryManager()->getAddressBackedRegion(address);
-            // getMemoryManager()->cleanAddressBackedRegion(address);    // Clean the CXL-backed cachelines
-            // TODO: You need to clean it to avoid expansion of the map
+            getMemoryManager()->cleanAddressBackedRegion(address);    // Clean the CXL-backed cachelines
          }
          boost::tie(dram_latency, hit_where) = m_master->m_dram_cntlr->putDataToDram(address, m_core_id_master, data_buf, t_issue);
          break;
-
       default:
          LOG_PRINT_ERROR("Unsupported Mem Op Type(%u)", mem_op_type);
    }
@@ -1589,7 +1585,15 @@ MYLOG("evicting @%lx", evict_address);
                ScopedLock sl(getLock());
                m_master->m_dram_outstanding_writebacks->getCompletionTime(t_now, dram_latency);
             }
-         }
+         } else {
+            MEMORY_REGION region = getMemoryManager()->getAddressBackedRegion(evict_address);
+            if (BELONGS_TO_TYPE3(region) && IS_TRACKED_READ(region)) {
+               m_master->m_dram_cntlr->getEPAgent(evict_address)->RemoveViewBackBF(evict_address);
+            }
+            if (region != DEFAULT) {
+               getMemoryManager()->cleanAddressBackedRegion(evict_address);    // Clean the CXL-backed cachelines
+            }
+         }      // Clean evict       
       }
       else
       {
@@ -1610,6 +1614,10 @@ MYLOG("evict FLUSH %lx", evict_address);
          }
          else
          {
+            if (getMemoryManager()->getAddressBackedRegion(evict_address) != DEFAULT) {
+               printf("AAAAAAAA 1598\n");
+            }
+            // HACK: LLC evicts clean cacheline with INV_REP
 MYLOG("evict INV %lx", evict_address);
             LOG_ASSERT_ERROR(evict_block_info.getCState() == CacheState::SHARED || evict_block_info.getCState() == CacheState::EXCLUSIVE,
                   "evict_address(0x%x), evict_state(%u)",
@@ -2253,6 +2261,8 @@ CacheCntlr::updateUncoreStatistics(HitWhere::where_t hit_where, SubsecondTime no
       // We can't really be sure that there are not outstanding transations that still pass a pointer
       // around to our ShmemPerf structure. By settings its last time to MaxTime, we prevent anyone
       // from updating statistics while we're reading them.
+      uncore_hist.update( m_shmem_perf->getEndTime().getNS() - m_shmem_perf->getInitialTime().getNS());
+
       m_shmem_perf->disable();
 
       m_shmem_perf_global->add(m_shmem_perf);

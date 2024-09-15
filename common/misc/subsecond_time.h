@@ -417,6 +417,10 @@ public:
    }
 
    friend inline std::ostream &operator<<(std::ostream &os, const ComponentBandwidth &time);
+   inline bool operator<(const ComponentBandwidth& other) const
+   {
+      return m_bw_in_bits_per_us < other.m_bw_in_bits_per_us;
+   }
 private:
    uint64_t m_bw_in_bits_per_us;
 

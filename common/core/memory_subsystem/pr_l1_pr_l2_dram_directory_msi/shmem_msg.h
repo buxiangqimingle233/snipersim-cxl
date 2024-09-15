@@ -33,6 +33,7 @@ namespace PrL1PrL2DramDirectoryMSI
             // Tag directory > DRAM
             DRAM_READ_REQ,
             DRAM_WRITE_REQ,
+            DRAM_WRITE_CLEAN_REQ,   // Singal clean eviction from LLC cacheline
             // DRAM > tag directory
             DRAM_READ_REP,
 

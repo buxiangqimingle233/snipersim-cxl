@@ -30,7 +30,7 @@ class Directory
       DirectoryEntry** m_directory_entry_list;
 
    public:
-      Directory(core_id_t core_id, String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers);
+      Directory(core_id_t core_id, String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers, String prefix = "");
       ~Directory();
 
       DirectoryEntry* getDirectoryEntry(UInt32 entry_num);

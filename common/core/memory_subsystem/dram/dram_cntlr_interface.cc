@@ -4,6 +4,7 @@
 #include "shmem_perf.h"
 #include "log.h"
 #include "fixed_types.h"
+#include "cxtnl_shim.h"
 
 DramCntlrInterface::DramCntlrInterface(MemoryManagerBase* memory_manager, ShmemPerfModel* shmem_perf_model, UInt32 cache_block_size)
    : m_memory_manager(memory_manager)
@@ -15,12 +16,20 @@ DramCntlrInterface::DramCntlrInterface(MemoryManagerBase* memory_manager, ShmemP
    if (Sim()->getCfg()->hasKey("perf_model/cxl/enabled") && Sim()->getCfg()->getBool("perf_model/cxl/enabled")) {
       cxl_mem_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_mem_roundtrip");
    }
-   m_ep_agent = new CxTnLMemShim::EPAgent();
+   int num_memory_controllers = Sim()->getCfg()->getInt("perf_model/dram/num_controllers");
+   if (num_memory_controllers == -1) {
+      SInt32 core_count = Config::getSingleton()->getApplicationCores();
+      UInt32 smt_cores = Sim()->getCfg()->getInt("perf_model/core/logical_cpus");
+      SInt32 memory_controllers_interleaving = Sim()->getCfg()->getInt("perf_model/dram/controllers_interleaving") * smt_cores;
+      num_memory_controllers = (core_count + memory_controllers_interleaving - 1) / memory_controllers_interleaving;
+   }
+   m_core_count = Config::getSingleton()->getApplicationCores();
+   m_ep_agents = std::vector<CxTnLMemShim::EPAgent*>(num_memory_controllers, NULL);
 }
 
 DramCntlrInterface::~DramCntlrInterface()
 {
-   delete m_ep_agent;
+   // delete m_ep_agent;
 }
 
 
@@ -65,6 +74,16 @@ void DramCntlrInterface::handleMsgFromTagDirectory(core_id_t sender, PrL1PrL2Dra
          putDataToDram(shmem_msg->getAddress(), shmem_msg->getRequester(), shmem_msg->getDataBuf(), msg_time);
 
          // DRAM latency is ignored on write
+         break;
+      }
+
+      case PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_CLEAN_REQ: {
+         LOG_ASSERT_ERROR(BELONGS_TO_TYPE3(shmem_msg->hit_mem_region), "WRITE CLEAN Req must target Type-3 memory region");
+         if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_READ(hit_mem_region)) {
+            core_id_t requester = shmem_msg->getRequester();
+            IntPtr address = shmem_msg->getAddress();
+            getEPAgent(requester)->RemoveViewBackBF(address);  
+         }
          break;
       }
 

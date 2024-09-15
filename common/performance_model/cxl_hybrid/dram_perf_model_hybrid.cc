@@ -17,7 +17,12 @@ DramPerfModelHybrid::DramPerfModelHybrid(core_id_t core_id,
     m_node(DramPerfModelHybrid::MEMORY_NODE::LOCAL)
     // numa_balancer(NULL)
 {
-    
+    ComponentBandwidth logic_bandwidth = 8 * Sim()->getCfg()->getFloat("perf_model/dram/total_bandwidth") / Sim()->getCfg()->getInt("perf_model/dram/num_controllers");
+    if (logic_bandwidth < m_dram_bandwidth)
+    {
+        LOG_PRINT_WARNING("DRAM bandwidth per controller is higher than total DRAM bandwidth, reducing per-controller bandwidth");
+        m_dram_bandwidth = logic_bandwidth;
+    }
     m_dram_access_cost_local = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/local_latency")));
     m_dram_access_cost_remote = SubsecondTime::FS() * static_cast<uint64_t>(TimeConverter<float>::NStoFS(Sim()->getCfg()->getFloat("perf_model/dram/remote_latency")));
 

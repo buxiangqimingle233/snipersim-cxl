@@ -1,6 +1,13 @@
 #include "dram_directory_cache.h"
 #include "log.h"
 #include "utils.h"
+#include "shmem_req.h"
+#include "simulator.h"
+#include "core_manager.h"
+#include "cxtnl_shim.h"
+#include "performance_model.h"
+#include "shmem_perf.h"
+#include "../parametric_dram_directory_msi/memory_manager.h"
 
 namespace PrL1PrL2DramDirectoryMSI
 {
@@ -14,7 +21,8 @@ DramDirectoryCache::DramDirectoryCache(
       UInt32 max_hw_sharers,
       UInt32 max_num_sharers,
       ComponentLatency dram_directory_cache_access_time,
-      ShmemPerfModel* shmem_perf_model):
+      ShmemPerfModel* shmem_perf_model,
+      String name):
    m_total_entries(total_entries),
    m_associativity(associativity),
    m_cache_block_size(cache_block_size),
@@ -24,12 +32,14 @@ DramDirectoryCache::DramDirectoryCache(
    m_num_sets = m_total_entries / m_associativity;
 
    // Instantiate the directory
-   m_directory = new Directory(core_id, directory_type_str, total_entries, max_hw_sharers, max_num_sharers);
+   m_directory = new Directory(core_id, directory_type_str, total_entries, max_hw_sharers, max_num_sharers, name);
    m_replacement_ptrs = new UInt32[m_num_sets];
 
    // Logs
    m_log_num_sets = floorLog2(m_num_sets);
    m_log_cache_block_size = floorLog2(m_cache_block_size);
+
+   registerStatsMetric(name + "directory", core_id, String("allocation-try"), &allocation_try);
 }
 
 DramDirectoryCache::~DramDirectoryCache()
@@ -64,6 +74,8 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address, bool modeled)
       }
    }
 
+   allocation_try++;
+
    // Find a free directory entry if one does not currently exist
    for (UInt32 i = 0; i < m_associativity; i++)
    {
@@ -92,6 +104,9 @@ DramDirectoryCache::getDirectoryEntry(IntPtr address, bool modeled)
 void
 DramDirectoryCache::getReplacementCandidates(IntPtr address, std::vector<DirectoryEntry*>& replacement_candidate_list)
 {
+   if (getDirectoryEntry(address) != NULL) {
+      return;
+   }
    assert(getDirectoryEntry(address) == NULL);
 
    IntPtr tag;
@@ -160,6 +175,65 @@ DramDirectoryCache::splitAddress(IntPtr address, IntPtr& tag, UInt32& set_index)
    tag = cache_block_address >> getLogNumSets();
    set_index = ((UInt32) cache_block_address) & (getNumSets() - 1);
 
+}
+
+
+void CXLSnoopFilter::TryAllocate(ShmemReq* shmem_req) {
+   IntPtr address = shmem_req->getShmemMsg()->getAddress();
+   core_id_t requester = shmem_req->getShmemMsg()->getRequester();
+   SubsecondTime msg_time = m_shmem_perf_model->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+
+   // Not belongs to type 2
+   if (!BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
+      return;
+   }
+
+   // No replacement is needed
+   if (getDirectoryEntry(address) != NULL) {
+      return;
+   }
+
+   std::vector<DirectoryEntry*> replacement_candidate_list;
+   getReplacementCandidates(address, replacement_candidate_list);
+
+   std::vector<DirectoryEntry*>::iterator it;
+   std::vector<DirectoryEntry*>::iterator replacement_candidate = replacement_candidate_list.end();
+   for (it = replacement_candidate_list.begin(); it != replacement_candidate_list.end(); it++)
+   {
+      if ( ( (replacement_candidate == replacement_candidate_list.end()) ||
+            ((*replacement_candidate)->getNumSharers() > (*it)->getNumSharers())
+         ))
+      {
+         replacement_candidate = it;
+      }
+   }
+
+   // FIXME: No candidate means that the address is already located in the SF
+   // This errors is caused by the fact that the allocated address is determined by the directory but not the SF, 
+   // so that we could not ensure the address misses on SF 
+   DirectoryState::dstate_t curr_dstate = (*replacement_candidate)->getDirectoryBlockInfo()->getDState();
+
+   IntPtr replaced_address = (*replacement_candidate)->getAddress();
+
+   replaceDirectoryEntry(replaced_address, address, true);
+
+   evict++;
+
+   SubsecondTime l = SubsecondTime::NSfromFloat(cxl_backinv_roundtrip);
+   atomic_add_subsecondtime(cxl_bi_overhead, l);
+   Sim()->getCoreManager()->getCoreFromID(requester)->getPerformanceModel()->incrementElapsedTime(l);
+
+   shmem_req->updateTime(shmem_req->getTime() + l);
+   shmem_req->getShmemMsg()->getPerf()->updateTime(shmem_req->getTime() + l, ShmemPerf::CXL_BI);
+
+   SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+   ((ParametricDramDirectoryMSI::MemoryManager*)(Sim()->getCoreManager()->getCoreFromID(requester)->getMemoryManager()))->getDramCntlr()->getEPAgent(shmem_req->getShmemMsg()->getRequester())->recordBusTraffic(now, shmem_req->getShmemMsg()->getMsgLen());
+
+   // getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+   // updateShmemPerf(shmem_req, ShmemPerf::CXL_CC);
+
+   // LOG_ASSERT_ERROR(replacement_candidate != replacement_candidate_list.end(),
+   //       "Cannot find a directory entry to be replaced with a non-zero request list (see Redmine #175)");
 }
 
 }

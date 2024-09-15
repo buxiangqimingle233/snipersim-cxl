@@ -107,6 +107,7 @@ MemoryManagerBase::getCoreListWithMemoryControllers()
          }
 
          std::pair<bool, std::vector<core_id_t> > core_list_with_memory_controllers_1 = NetworkModel::computeMemoryControllerPositions(l_models_memory_1, num_memory_controllers, core_count);
+
          return core_list_with_memory_controllers_1.second;
       }
    }

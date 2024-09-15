@@ -251,6 +251,7 @@ StatHist::operator += (StatHist & stat)
 void
 StatHist::update(unsigned long v)
 {
+#ifdef TRACK_UNCORE_LATENCY
    if (n == 0) {
       min = v;
       max = v;
@@ -260,17 +261,21 @@ StatHist::update(unsigned long v)
    s2 += v*v;
    if (v < min) min = v;
    if (v > max) max = v;
-   int bin = floorLog2(v) + 1;
+   // int bin = floorLog2(v) + 1;
+   int bin = v / (rangeh / HIST_MAX);
    if (bin >= HIST_MAX) bin = HIST_MAX - 1;
       hist[bin]++;
+#endif
 }
 
 void
 StatHist::print()
 {
+#ifdef TRACK_UNCORE_LATENCY
    printf("n(%lu), avg(%.2f), std(%.2f), min(%lu), max(%lu), hist(%lu",
       n, n ? s/float(n) : 0, n ? sqrt((s2/n - (s/n)*(s/n))*n/float(n-1)) : 0, min, max, hist[0]);
    for(int i = 1; i < HIST_MAX; ++i)
       printf(",%lu", hist[i]);
    printf(")\n");
+#endif
 }

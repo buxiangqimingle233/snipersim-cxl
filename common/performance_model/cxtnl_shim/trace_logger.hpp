@@ -1,26 +1,22 @@
-#pragma once
-
-#include <fstream>
-#include <vector>
-#include <utility>
+#include <zlib.h>
 #include "fixed_types.h"
 
-namespace CxTnLMemShim {
-typedef struct {
+struct DRAM_ACCESS {
     int access_type;
     IntPtr address_base;
-    unsigned int size;
-} DRAM_ACCESS;
+    size_t size;
+};
 
 class Logger {
     std::vector<DRAM_ACCESS> buffer;
-    std::ofstream file;
+    gzFile file;
     size_t bufferSize;
     pthread_mutex_t* logger_latch;
 
 public:
     Logger(const char* filename, size_t bufferSize)
-        : file(filename), bufferSize(bufferSize) {
+        : bufferSize(bufferSize) {
+        file = gzopen(filename, "wb");
         if (!file) {
             throw std::runtime_error("Failed to open log file");
         }
@@ -39,15 +35,14 @@ public:
 
     void flush() {
         for (const auto& entry : buffer) {
-            file << entry.access_type << " " << entry.address_base << " " << entry.size << '\n';
+            gzprintf(file, "%d %p %u\n", entry.access_type, entry.address_base, entry.size);
         }
         buffer.clear();
     }
 
     ~Logger() {
         flush();
+        gzclose(file);
         delete logger_latch;
     }
 };
-
-}

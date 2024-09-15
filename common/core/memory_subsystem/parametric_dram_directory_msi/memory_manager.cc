@@ -47,7 +47,7 @@ MemoryManager::MemoryManager(Core* core,
    m_dram_cntlr_present(false),
    m_enabled(false),
    m_region(DEFAULT),
-   m_cached_addr_region_map(std::unordered_map<IntPtr, MEMORY_REGION>())
+   m_cached_addr_region_map(std::unordered_map<IntPtr, MEMORY_REGION>(65536))
 {
    // Read Parameters from the Config file
    std::map<MemComponent::component_t, CacheParameters> cache_parameters;
@@ -576,7 +576,7 @@ MYLOG("send msg %u %ul%u > %ul%u", msg_type, requester, sender_mem_component, re
       } else if (msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::INV_REP || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::FLUSH_REP || msg_type == PrL1PrL2DramDirectoryMSI::ShmemMsg::WB_REP) {
          // Write Back / Flush / Invalidation
          hit_mem_region = getAddressBackedRegion(address);
-         // cleanAddressBackedRegion(address);
+         cleanAddressBackedRegion(address);
       }
    }
 

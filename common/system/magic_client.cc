@@ -57,6 +57,11 @@ UInt64 handleMagicInstruction(thread_id_t thread_id, UInt64 cmd, UInt64 arg0, UI
                            // + Sim()->getThreadManager()->getThreadFromID(arg0)->getCore()->getPerformanceModel()->getElapsedTime().getNS();
       return time_ns;
    }
+   case SIM_INSERT_LATENCY: 
+   {
+      Sim()->getCoreManager()->getCurrentCore()->getPerformanceModel()->incrementElapsedTime(SubsecondTime::NS(arg0));
+      return 0;
+   }
    default:
       LOG_PRINT_WARNING_ONCE("Encountered unknown magic instruction cmd(%u)", cmd);
       return 1;

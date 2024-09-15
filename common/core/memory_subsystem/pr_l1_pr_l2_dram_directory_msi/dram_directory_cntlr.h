@@ -22,6 +22,7 @@ namespace PrL1PrL2DramDirectoryMSI
          MemoryManagerBase* m_memory_manager;
          AddressHomeLookup* m_dram_controller_home_lookup;
          DramDirectoryCache* m_dram_directory_cache;
+         CXLSnoopFilter* m_cxl_snoop_filter;
          ReqQueueList* m_dram_directory_req_queue_list;
 
          NucaCache* m_nuca_cache;
@@ -37,7 +38,9 @@ namespace PrL1PrL2DramDirectoryMSI
          UInt64 forward, forward_failed;
 
          unsigned int cxl_cache_roundtrip;
+         unsigned int cxl_backinv_roundtrip;
          SubsecondTime cxl_cache_overhead;
+         SubsecondTime cxl_bi_overhead;
 
          UInt32 getCacheBlockSize() { return m_cache_block_size; }
          MemoryManagerBase* getMemoryManager() { return m_memory_manager; }
@@ -59,7 +62,7 @@ namespace PrL1PrL2DramDirectoryMSI
          void processFlushRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void processWbRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_msg);
          void sendDataToNUCA(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, bool count, ShmemMsg* shmem_msg);
-         void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* shmem_msg);
+         void sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* shmem_msg, PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type = PrL1PrL2DramDirectoryMSI::ShmemMsg::INVALID_MSG_TYPE);
 
          void updateShmemPerf(ShmemReq *shmem_req, ShmemPerf::shmem_times_type_t reason = ShmemPerf::UNKNOWN)
          {

@@ -24,6 +24,8 @@ const char* shmem_reason_names[] = {
    "dram-queue",
    "dram-bus",
    "dram-device",
+   "cxl-bi",
+   "cxl-cc",
    "cxl-link",
    "ctxnl-vat",
    "ctxnl-cmt",

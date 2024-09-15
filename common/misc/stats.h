@@ -109,13 +109,15 @@ template <class T> void registerStatsMetric(String objectName, UInt32 index, Str
 
 class StatHist {
   private:
-    static const int HIST_MAX = 20;
+    static const int HIST_MAX = 300;
     unsigned long n, s, s2, min, max;
+    unsigned long rangel, rangeh;
     unsigned long hist[HIST_MAX];
     char dummy[64];
   public:
-    StatHist() : n(0), s(0), s2(0), min(0), max(0) { bzero(hist, sizeof(hist)); }
+    StatHist() : n(0), s(0), s2(0), min(0), max(0), rangel(0), rangeh(3000) { bzero(hist, sizeof(hist)); }
     StatHist & operator += (StatHist & stat);
     void update(unsigned long v);
     void print();
 };
+

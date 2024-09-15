@@ -1,12 +1,14 @@
 #include "dram_directory_cntlr.h"
 #include "log.h"
-// #include "../parametric_dram_directory_msi/memory_manager.h"
+#include "../parametric_dram_directory_msi/memory_manager.h"
 #include "cxtnl_shim.h"
 #include "stats.h"
 #include "nuca_cache.h"
 #include "shmem_perf.h"
 #include "coherency_protocol.h"
 #include "config.hpp"
+#include "simulator.h"
+#include "core_manager.h"
 
 #if 0
    extern Lock iolock;
@@ -72,12 +74,30 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
          registerStatsMetric("directory", core_id, String("evict-")+DStateString(state), &evict[state]);
       }
    }
+   UInt32 sf_total_entries = Sim()->getCfg()->getInt("perf_model/dram_directory/cxl_sf_total_entries");
+   UInt32 sf_associativity = Sim()->getCfg()->getInt("perf_model/dram_directory/cxl_sf_associativity");
    cxl_cache_roundtrip = Sim()->getCfg()->getInt("perf_model/cxl/cxl_cache_roundtrip");
+   cxl_backinv_roundtrip = cxl_cache_roundtrip * 1.5;
+
+   m_cxl_snoop_filter = new CXLSnoopFilter(
+      core_id, 
+      dram_directory_type_str,
+      sf_total_entries,
+      sf_associativity,
+      cache_block_size,
+      dram_directory_max_hw_sharers,
+      dram_directory_max_num_sharers,
+      dram_directory_cache_access_time,
+      m_shmem_perf_model,
+      cxl_backinv_roundtrip,
+      cxl_bi_overhead,
+      "snoop-filter-"
+   );
    
    registerStatsMetric("directory", core_id, "forward", &forward);
    registerStatsMetric("directory", core_id, "forward-failed", &forward_failed);
    registerStatsMetric("directory", core_id, "cxl-cache-overhead", &cxl_cache_overhead);
-
+   registerStatsMetric("directory", core_id, "cxl-bi-overhead", &cxl_bi_overhead);
    String protocol = Sim()->getCfg()->getString("caching_protocol/variant");
    if (protocol == "msi")
    {
@@ -100,6 +120,7 @@ DramDirectoryCntlr::DramDirectoryCntlr(core_id_t core_id,
 DramDirectoryCntlr::~DramDirectoryCntlr()
 {
    delete m_dram_directory_cache;
+   delete m_cxl_snoop_filter;
    delete m_dram_directory_req_queue_list;
 }
 
@@ -287,6 +308,10 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
       }
    }
 
+   if (replacement_candidate == replacement_candidate_list.end()) {
+      // printf("m_dram_directory_req_queue_list size: %ld\n", m_dram_directory_req_queue_list->size());
+      printf("replacement_candidate_list size: %ld\n", replacement_candidate_list.size());
+   }
    LOG_ASSERT_ERROR(replacement_candidate != replacement_candidate_list.end(),
          "Cannot find a directory entry to be replaced with a non-zero request list (see Redmine #175)");
 
@@ -305,9 +330,56 @@ DramDirectoryCntlr::processDirectoryEntryAllocationReq(ShmemReq* shmem_req)
    m_dram_directory_req_queue_list->enqueue(replaced_address, nullify_req);
    MYLOG("ENqueued NULLIFY request for address %lx", replaced_address );
 
+   // FIXME: Recover it if possible
    assert(m_dram_directory_req_queue_list->size(replaced_address) == 1);
    processNullifyReq(nullify_req);
 
+
+   // HACK: The CXL SF only takes charge of performance rather than funcionality
+   // So that we only invoke it on allocation & reclaimation, but not implement its query and write
+/*
+   if (BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
+      std::vector<DirectoryEntry*> replacement_candidate_list;
+      m_cxl_snoop_filter->getReplacementCandidates(address, replacement_candidate_list);
+
+      std::vector<DirectoryEntry*>::iterator it;
+      std::vector<DirectoryEntry*>::iterator replacement_candidate = replacement_candidate_list.end();
+      for (it = replacement_candidate_list.begin(); it != replacement_candidate_list.end(); it++)
+      {
+         if ( ( (replacement_candidate == replacement_candidate_list.end()) ||
+               ((*replacement_candidate)->getNumSharers() > (*it)->getNumSharers())
+            )
+            &&
+            (m_dram_directory_req_queue_list->size((*it)->getAddress()) == 0)
+            )
+         {
+            replacement_candidate = it;
+         }
+      }
+
+      // FIXME: No candidate means that the address is already located in the SF
+      // This errors is caused by the fact that the allocated address is determined by the directory but not the SF, 
+      // so that we could not ensure the address misses on SF 
+      if (replacement_candidate != replacement_candidate_list.end()) {
+         DirectoryState::dstate_t curr_dstate = (*replacement_candidate)->getDirectoryBlockInfo()->getDState();
+         evict[curr_dstate]++;
+
+         if (curr_dstate != DirectoryState::UNCACHED) {
+            SubsecondTime l = SubsecondTime::NSfromFloat(cxl_backinv_roundtrip);
+            atomic_add_subsecondtime(cxl_bi_overhead, l);
+            Sim()->getCoreManager()->getCoreFromID(requester)->getPerformanceModel()->incrementElapsedTime(l);
+            // getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+            shmem_req->updateTime(shmem_req->getTime() + l);
+         }
+
+         IntPtr replaced_address = (*replacement_candidate)->getAddress();
+
+         m_cxl_snoop_filter->replaceDirectoryEntry(replaced_address, address, true);
+      }
+      // LOG_ASSERT_ERROR(replacement_candidate != replacement_candidate_list.end(),
+      //       "Cannot find a directory entry to be replaced with a non-zero request list (see Redmine #175)");
+   }
+*/
    MYLOG("End @ %lx", address);
 
    return directory_entry;
@@ -406,6 +478,8 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    MYLOG("Start @ %lx", address);
    updateShmemPerf(shmem_req);
 
+   m_cxl_snoop_filter->TryAllocate(shmem_req);
+
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    if (directory_entry == NULL)
    {
@@ -426,9 +500,24 @@ DramDirectoryCntlr::processExReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
             // increase time
             SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
             atomic_add_subsecondtime(cxl_cache_overhead, l);
+
+            // Sim()->getCoreManager()->getCoreFromID(requester)->getPerformanceModel()->incrementElapsedTime(l);
+            // shmem_req->updateTime(shmem_req->getTime() + l);
+
             getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+            updateShmemPerf(shmem_req, ShmemPerf::CXL_CC);
+
+            SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+            ParametricDramDirectoryMSI::MemoryManager* manager = (ParametricDramDirectoryMSI::MemoryManager*)getMemoryManager();
+            manager->getDramCntlr()->getEPAgent(shmem_req->getShmemMsg()->getRequester())->recordBusTraffic(now, shmem_req->getShmemMsg()->getMsgLen());
+
+            // getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+            // shmem_req->getShmemMsg()->getPerf()->upda
+
          }
+         break;
       }
+      default: break;
    }
 
    switch (curr_dstate)
@@ -512,6 +601,8 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
    MYLOG("Start @ %lx", address);
    updateShmemPerf(shmem_req);
 
+   m_cxl_snoop_filter->TryAllocate(shmem_req);
+
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
    if (directory_entry == NULL)
    {
@@ -532,9 +623,19 @@ DramDirectoryCntlr::processShReqFromL2Cache(ShmemReq* shmem_req, Byte* cached_da
             // increase time
             SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
             atomic_add_subsecondtime(cxl_cache_overhead, l);
+            // Sim()->getCoreManager()->getCoreFromID(requester)->getPerformanceModel()->incrementElapsedTime(l);
+            // shmem_req->updateTime(shmem_req->getTime() + l);
+
             getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+            updateShmemPerf(shmem_req, ShmemPerf::CXL_CC);
+
+            SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+            ParametricDramDirectoryMSI::MemoryManager* manager = (ParametricDramDirectoryMSI::MemoryManager*)getMemoryManager();
+            manager->getDramCntlr()->getEPAgent(shmem_req->getShmemMsg()->getRequester())->recordBusTraffic(now, shmem_req->getShmemMsg()->getMsgLen());
          }
+         break;
       }
+      default: break;
    }
 
    switch (curr_dstate)
@@ -927,6 +1028,12 @@ DramDirectoryCntlr::processInvRepFromL2Cache(core_id_t sender, ShmemMsg* shmem_m
             processNullifyReq(shmem_req);
          }
       }
+   } else {    
+      // The invalidation just caused by a clean eviction from the LLC, inform the DRAM controller. This message has no responses. 
+      // Just send type-3 message to reduce traffic. 
+      if (BELONGS_TO_TYPE3(shmem_msg->hit_mem_region)) {
+         sendDataToDram(address, shmem_msg->getRequester(), shmem_msg->getDataBuf(), getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD), shmem_msg, PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_CLEAN_REQ);
+      }
    }
    MYLOG("End @ %lx", address);
 }
@@ -939,6 +1046,8 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
    IntPtr address = shmem_msg->getAddress();
    core_id_t requester = shmem_msg->getRequester();
    updateShmemPerf(shmem_req);
+
+   m_cxl_snoop_filter->TryAllocate(shmem_req);
 
    MYLOG("processUpgradeReqFromL2Cache for address: %lx, requester= %d", address, requester);
    DirectoryEntry* directory_entry = m_dram_directory_cache->getDirectoryEntry(address);
@@ -971,13 +1080,26 @@ DramDirectoryCntlr::processUpgradeReqFromL2Cache(ShmemReq* shmem_req, Byte* cach
       case DirectoryState::MODIFIED:
       case DirectoryState::SHARED:
       {
+         // HACK: We add the cxl_cache_overhead to the requester core but not the core that DRAM directory belongs to, 
+         // since adding time to it will cause the master core take much longer time than others. 
          if (BELONGS_TO_TYPE2(shmem_req->getShmemMsg()->hit_mem_region)) {
             // increase time
             SubsecondTime l = SubsecondTime::NSfromFloat(cxl_cache_roundtrip);
             atomic_add_subsecondtime(cxl_cache_overhead, l);
+            // Sim()->getCoreManager()->getCoreFromID(requester)->getPerformanceModel()->incrementElapsedTime(l);
+            // shmem_req->updateTime(shmem_req->getTime() + l);
+
             getMemoryManager()->getShmemPerfModel()->incrElapsedTime(l, ShmemPerfModel::_USER_THREAD);
+            updateShmemPerf(shmem_req, ShmemPerf::CXL_CC);
+
+            SubsecondTime now = getShmemPerfModel()->getElapsedTime(ShmemPerfModel::_SIM_THREAD);
+            ParametricDramDirectoryMSI::MemoryManager* manager = (ParametricDramDirectoryMSI::MemoryManager*)getMemoryManager();
+            manager->getDramCntlr()->getEPAgent(shmem_req->getShmemMsg()->getRequester())->recordBusTraffic(now, shmem_req->getShmemMsg()->getMsgLen());
+
          }
+         break;
       }
+      default: break;
    }
 
    switch (curr_dstate)
@@ -1281,9 +1403,11 @@ DramDirectoryCntlr::sendDataToNUCA(IntPtr address, core_id_t requester, Byte* da
 }
 
 void
-DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* org_msg )
+DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, SubsecondTime now, ShmemMsg* org_msg, PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type_)
 {
    MYLOG("Start @ %lx", address);
+
+   PrL1PrL2DramDirectoryMSI::ShmemMsg::msg_t msg_type = msg_type_ == PrL1PrL2DramDirectoryMSI::ShmemMsg::INVALID_MSG_TYPE ? PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ : msg_type_;
 
    if (m_nuca_cache)
    {
@@ -1296,7 +1420,7 @@ DramDirectoryCntlr::sendDataToDram(IntPtr address, core_id_t requester, Byte* da
       // Write data to Dram
       core_id_t dram_node = m_dram_controller_home_lookup->getHomeCXL(address, requester, org_msg->hit_mem_region);
 
-      getMemoryManager()->sendMsg(PrL1PrL2DramDirectoryMSI::ShmemMsg::DRAM_WRITE_REQ,
+      getMemoryManager()->sendMsg(msg_type,
             MemComponent::TAG_DIR, MemComponent::DRAM,
             requester /* requester */,
             dram_node /* receiver */,

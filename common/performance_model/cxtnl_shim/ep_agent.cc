@@ -99,6 +99,14 @@ EPAgent::EPAgent(): m_cnt_raw(0), m_cnt_hash_conflict(0),
     pthread_mutex_init(work_queue_latch, NULL);
     inv_que_latch = new pthread_mutex_t;
     pthread_mutex_init(inv_que_latch, NULL);
+    vat_latch = new pthread_mutex_t;
+    pthread_mutex_init(vat_latch, NULL);
+
+#ifdef TRACK_BUS_THROUGHPUT
+    knob_sent_cnt = std::vector<UInt32>(1e4, 0);
+    knob_record_interval = 1e4;   // 1ms
+    knob_start_record_time = SubsecondTime::MaxTime();
+#endif
 }
 
 
@@ -144,7 +152,8 @@ SubsecondTime EPAgent::dequeueWorkQueue() {
         for (EPAgent* peer: peer_agents) {
             peer->AppendPendingRemoteInvReq(wqe);
         }
-        InvalidLocalCopy(wqe);
+        // Also invalid all local copies
+        total_latency += InvalidLocalCopy(wqe);
         m_handled_flush++;
     }
     pthread_mutex_unlock(work_queue_latch);
@@ -167,6 +176,8 @@ SubsecondTime EPAgent::AppendWorkQueueElement(WQE wqe) {
 
 
 SubsecondTime EPAgent::Translate(IntPtr physical_address, core_id_t requester, int access_type_, IntPtr& dram_address) {
+    pthread_mutex_lock(vat_latch);
+
     DramCntlrInterface::access_t access_type = (DramCntlrInterface::access_t)access_type_;
     IntPtr cacheline_address = physical_address & cacheline_base_mask;
     IntPtr page_address = physical_address & page_base_mask;
@@ -196,7 +207,7 @@ SubsecondTime EPAgent::Translate(IntPtr physical_address, core_id_t requester, i
             if (view_address_table->find(cacheline_address) != NULL) {   // View Address Table Check
                 view_bf->counting_bloom_remove(bf_query_key, sizeof(cacheline_address));
                 view_address_table->remove(cacheline_address);
-                
+
                 latency += SubsecondTime::NSfromFloat(cuckoo_hashmap_single_hop_latency);
                 latency += SubsecondTime::NSfromFloat(counting_bloom_query_latency);
                 
@@ -223,6 +234,8 @@ SubsecondTime EPAgent::Translate(IntPtr physical_address, core_id_t requester, i
             pthread_mutex_unlock(inv_que_latch);
         }
     }
+
+    pthread_mutex_unlock(vat_latch);
     return latency;
 }
 
@@ -232,18 +245,22 @@ void EPAgent::setCoreID(core_id_t core_id) {
     if (trace_logger == NULL) {
 #ifdef UNIT_TEST
         String name = String("cxl3_dram_trace_c-1") + String(".log");
-#else
+#endif
+
+#ifdef RECORD_CXL_TRACE
         assert(cid != -1);
         std::string str = std::to_string(cid);
         String name = Sim()->getConfig()->formatOutputFileName("cxl3_dram_trace_c" + String(str.begin(), str.end()) + ".log");
-#endif
         trace_logger = new Logger(name.c_str(), 1024);
+#endif
     }
 }
 
 
 SubsecondTime EPAgent::Record(IntPtr physical_address, core_id_t requester, int access_type, IntPtr& dram_address) {
+    pthread_mutex_lock(vat_latch);
     trace_logger->log({access_type, physical_address, 1 << 6});   // 
+    pthread_mutex_unlock(vat_latch);
     return SubsecondTime::Zero();
 }
 
@@ -269,6 +286,14 @@ EPAgent::~EPAgent() {
     std::cout << "Benchmark Status: " << std::endl;
     std::cout << "Read: " << m_handled_read << " Write: " << m_handled_write << " Flush: " << m_handled_flush << " Remove Inv: " << m_handled_remote_inv << " Raw: " << m_cnt_raw << std::endl;
     std::cout << std::endl;
+
+#ifdef TRACK_BUS_THROUGHPUT
+    std::cout << "EP-Bus-Record: " << std::endl;
+    for (UInt32 i = 0; i < knob_sent_cnt.size(); i++) {
+        std::cout << knob_sent_cnt[i] << ",";
+    }
+    std::cout << std::endl;
+#endif
 
     if (trace_logger != NULL) {
         delete trace_logger;

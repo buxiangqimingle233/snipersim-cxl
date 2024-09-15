@@ -17,6 +17,8 @@
 #include "stats.h"
 #include "subsecond_time.h"
 #include "shmem_perf.h"
+// #include <boost/histogram.hpp>
+// #include <boost/format.hpp> // used here for printing
 
 #include "boost/tuple/tuple.hpp"
 
@@ -241,6 +243,7 @@ namespace ParametricDramDirectoryMSI
            SubsecondTime mshr_latency;
            SubsecondTime cxl_cache_overhead;
            UInt64 cxl_mem_read_cnt, cxl_mem_write_cnt;
+           UInt64 cxl_mem_type3_read_cnt, cxl_mem_type3_write_cnt;
            UInt64 prefetches;
            UInt64 coherency_downgrades, coherency_upgrades, coherency_invalidates, coherency_writebacks;
            #ifdef ENABLE_TRANSITIONS
@@ -271,6 +274,7 @@ namespace ParametricDramDirectoryMSI
          Semaphore* m_network_thread_sem;
          volatile HitWhere::where_t m_last_remote_hit_where;
 
+         StatHist uncore_hist;
          ShmemPerf* m_shmem_perf;
          ShmemPerf* m_shmem_perf_global;
          SubsecondTime m_shmem_perf_totaltime;
@@ -280,8 +284,9 @@ namespace ParametricDramDirectoryMSI
          ShmemPerfModel* m_shmem_perf_model;
 
          // CXL overheads
-         // unsigned int cxl_mem_roundtrip;
+         unsigned int cxl_mem_roundtrip;
          unsigned int cxl_cache_roundtrip;
+
 
          // Core-interfacing stuff
          void accessCache(

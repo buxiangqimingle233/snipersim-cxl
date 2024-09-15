@@ -85,9 +85,9 @@ DramCntlr::getDataFromDram(IntPtr address, core_id_t requester, Byte* data_buf, 
    if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_READ(hit_mem_region)) {
       IntPtr dram_address = 0;
 #ifdef RECORD_CXL_TRACE
-      SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, READ, dram_address);
+      SubsecondTime view_address_translate_latency = getEPAgent(requester)->Record(address, requester, READ, dram_address);
 #else
-      SubsecondTime view_address_translate_latency = m_ep_agent->Translate(address, requester, READ, dram_address);
+      SubsecondTime view_address_translate_latency = getEPAgent(requester)->Translate(address, requester, READ, dram_address);
 #endif
       now += view_address_translate_latency;
 
@@ -145,9 +145,9 @@ DramCntlr::putDataToDram(IntPtr address, core_id_t requester, Byte* data_buf, Su
    if (BELONGS_TO_TYPE3(hit_mem_region) && IS_TRACKED_WRITE(hit_mem_region)) {
       IntPtr dram_address = 0;
 #ifdef RECORD_CXL_TRACE
-      SubsecondTime view_address_translate_latency = m_ep_agent->Record(address, requester, WRITE, dram_address);
+      SubsecondTime view_address_translate_latency = getEPAgent(requester)->Record(address, requester, WRITE, dram_address);
 #else
-      SubsecondTime view_address_translate_latency = m_ep_agent->Translate(address, requester, WRITE, dram_address);
+      SubsecondTime view_address_translate_latency = getEPAgent(requester)->Translate(address, requester, WRITE, dram_address);
 #endif
       now += view_address_translate_latency;
 

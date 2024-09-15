@@ -21,16 +21,25 @@
 #define SIM_GET_EMU_TIME        16
 #define SIM_SYNC_WRITE          17       
 #define SIM_FLUSH_WQ            18
+#define SIM_INSERT_LATENCY      19
 
 #define SIM_OPT_INSTRUMENT_DETAILED    0
 #define SIM_OPT_INSTRUMENT_WARMUP      1
 #define SIM_OPT_INSTRUMENT_FASTFORWARD 2
 
+// Indicate the CXL memory regions
+typedef uint32_t MEMORY_REGION;
+#define WITH_CXL_BNISP (1 << 2)
+#define WITH_CXL_MEM (1 << 1)
+
 #define CXL_TRACK_READ (1 << 11)
 #define CXL_TRACK_WRITE (1 << 10)
-#define CXL_STRONG_SNIPER_MODE ((1 << 2) | (1 << 1))
-#define CXL_WEAK_SNIPER_MODE (1 << 1)
+#define CXL_STRONG_SNIPER_MODE (WITH_CXL_BNISP | WITH_CXL_MEM)
+#define CXL_WEAK_SNIPER_MODE (WITH_CXL_MEM)
 #define LOCAL_SNIPER_MODE (0)
+
+#define DEFAULT LOCAL_SNIPER_MODE
+
 
 #if defined(__aarch64__)
 
@@ -152,5 +161,7 @@
 #define SimGetEmuTime()             SimMagic0(SIM_GET_EMU_TIME)
 #define SimSyncWrite(addr, size)    SimMagic2(SIM_SYNC_WRITE, addr, size)
 #define SimFlushWQ()                SimMagic0(SIM_FLUSH_WQ)
+
+#define SimInsertLatency(lat)          SimMagic1(SIM_INSERT_LATENCY, lat)
 
 #endif /* __SIM_API */

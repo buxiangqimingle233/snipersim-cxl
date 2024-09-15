@@ -7,7 +7,7 @@
 #include "log.h"
 #include "config.hpp"
 
-Directory::Directory(core_id_t core_id, String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers):
+Directory::Directory(core_id_t core_id, String directory_type_str, UInt32 num_entries, UInt32 max_hw_sharers, UInt32 max_num_sharers, String prefix):
    m_num_entries(num_entries),
    m_num_entries_allocated(0),
    m_max_hw_sharers(max_hw_sharers),
@@ -36,7 +36,7 @@ Directory::Directory(core_id_t core_id, String directory_type_str, UInt32 num_en
       }
    }
 
-   registerStatsMetric("directory", core_id, "entries-allocated", &m_num_entries_allocated);
+   registerStatsMetric(prefix + "directory", core_id, "entries-allocated", &m_num_entries_allocated);
 }
 
 Directory::~Directory()

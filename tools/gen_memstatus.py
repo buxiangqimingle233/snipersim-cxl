@@ -175,7 +175,10 @@ def generate_mem_count(jobid = None, resultsdir = None, partial = None, output =
       return 0
 
   def getsum(name):
-    return sum(list(filter(lambda x: x > 0 and x != float('inf'), results.get(name, 0))))
+    try: 
+      return float(sum(list(filter(lambda x: x > 0 and x != float('inf'), results.get(name, 0)))))
+    except:
+      return 0
 
   lines = {}
   names = ["L3.loads", "L3.stores", "L3.load-misses", "L3.store-misses", "L1-D.loads-where-dram", \
@@ -183,7 +186,7 @@ def generate_mem_count(jobid = None, resultsdir = None, partial = None, output =
       "network.shmem-1.bus.num-packets", "directory.entries-allocated",\
       "L1-D.cxl-mem-read-cnt", "L1-D.cxl-mem-write-cnt"]
   for n in names:
-    lines[n] = float(getsum(n))
+    lines[n] = getsum(n)
 
   printed_lines = {
     "load-hit-l1": lines["L1-D.loads"] - lines["L1-D.load-misses"],
@@ -194,11 +197,17 @@ def generate_mem_count(jobid = None, resultsdir = None, partial = None, output =
     "load-from-remote-cache": lines["L1-D.loads-where-cache-remote"],
     "l3-cxl-cache-overhead": lines["L3.cxl-cache-overhead"] / 1e6,
     "directory-cxl-cache-overhead": lines["directory.cxl-cache-overhead"] / 1e6,
+    "directory-cxl-bi-overhead": getsum("directory.cxl-bi-overhead") / 1e6,
     "cxl-mem-overhead": lines["dram.cxl-mem-overhead"] / 1e6,
     "bus-packets": lines["network.shmem-1.bus.num-packets"],
-    "entries-allocated": lines["directory.entries-allocated"],
+    "directory-entries-allocated": getsum("snoop-filter-directory.allocation-try"),
     "cxl-mem-read-cnt": lines["L1-D.cxl-mem-read-cnt"],
-    "cxl-mem-write-cnt": lines["L1-D.cxl-mem-write-cnt"]
+    "cxl-mem-write-cnt": lines["L1-D.cxl-mem-write-cnt"],
+    "cxl-mem-type3-read-cnt": getsum("L1-D.cxl-mem-type3-read-cnt"),
+    "cxl-mem-type3-write-cnt": getsum("L1-D.cxl-mem-type3-write-cnt"),
+    "directory-evict-cnt": getsum("snoop-filter-directory.evict"),
+    "ideal-directory-evict-cnt": getsum("directory.evict-S") + getsum("directory.evict-E") + getsum("directory.evict-M") + getsum("directory.evict-O"),
+    "bus-packets": getsum("network.shmem-1.bus.num-packets")
   }
 
   for n, l in printed_lines.items():

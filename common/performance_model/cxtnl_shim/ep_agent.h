@@ -52,7 +52,13 @@ private:
     // debugging
     Logger* trace_logger;
 
+    // Broadcast bus throughput requirments
+    std::vector<UInt32> knob_sent_cnt;
+    UInt32 knob_record_interval;
+    SubsecondTime knob_start_record_time;
+
     pthread_mutex_t* work_queue_latch;
+    pthread_mutex_t* vat_latch;
 
 private:
     bool BFCheck(UInt64 key, std::vector<bool>& bf, SubsecondTime& latency);
@@ -73,7 +79,7 @@ public:
     unsigned int cxl_cache_roundtrip, cxl_mem_roundtrip;
     unsigned int counting_bloom_query_latency, cuckoo_hashmap_single_hop_latency;
 
-public: 
+public:
     // EPAgent() { };
     EPAgent();
     ~EPAgent();
@@ -82,8 +88,14 @@ public:
 
     // Fast Path
     SubsecondTime Translate(IntPtr physical_address, core_id_t requester, int access_type, IntPtr& dram_address);
-
+    
     SubsecondTime Record(IntPtr physical_address, core_id_t requester, int access_type, IntPtr& dram_address);
+
+    void RemoveViewBackBF(IntPtr physical_address) {
+        IntPtr cacheline_address = physical_address & cacheline_base_mask;
+        IntPtr page_address = physical_address & page_base_mask;
+        view_back_bf->counting_bloom_remove((const char*)(&page_address), sizeof(cacheline_address));
+    }
 
     // Slow Path
     SubsecondTime AppendWorkQueueElement(WQE wqe);
@@ -95,6 +107,28 @@ public:
     }
 
     void setCoreID(core_id_t core_id);
+    
+    bool flag = false;
+    void recordBusTraffic(SubsecondTime now, int size) {
+#ifdef TRACK_BUS_THROUGHPUT
+        if (knob_start_record_time == SubsecondTime::MaxTime()) {
+            knob_start_record_time = now;
+        }
+        UInt64 idx = (now - knob_start_record_time).getNS() / knob_record_interval;
+        // printf("ns: %lu, idx: %lu, size: %d\n", now.getNS(), idx, size);
+        // if (idx == knob_sent_cnt.size() / 2 && !flag) {
+        //     printf("EP-Bus-Record:\n");
+        //     for (UInt32 i = 0; i < knob_sent_cnt.size(); i++) {
+        //         printf("%u ", knob_sent_cnt[i]);
+        //     }
+        //     printf("\n");
+        //     flag = true;
+        // }
+        if (idx < knob_sent_cnt.size()) {
+            knob_sent_cnt[idx] += size;
+        }
+#endif
+    }
 };
 
 }
